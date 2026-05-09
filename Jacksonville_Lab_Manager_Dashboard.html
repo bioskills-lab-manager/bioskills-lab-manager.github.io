@@ -1792,6 +1792,25 @@ const MEDTRONIC_PAR = [
   </div>
 </header>
 
+<!-- Master-only team links bar (shown above main toolbar) -->
+<div id="team-links-bar" style="display:none;max-width:1100px;margin:18px auto 0;padding:0 20px;">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;">Open team views:</span>
+    <a href="bert.html" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:#00838f;color:#fff;font-size:0.85rem;font-weight:600;text-decoration:none;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.25);font-size:0.65rem;font-weight:700;">BC</span>
+      Bert
+    </a>
+    <a href="ana.html" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:#c2185b;color:#fff;font-size:0.85rem;font-weight:600;text-decoration:none;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.25);font-size:0.65rem;font-weight:700;">AR</span>
+      Ana Maria
+    </a>
+    <a href="latisha.html" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:#6a1b9a;color:#fff;font-size:0.85rem;font-weight:600;text-decoration:none;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.25);font-size:0.65rem;font-weight:700;">L</span>
+      Latisha
+    </a>
+  </div>
+</div>
+
 <div class="toolbar">
   <div class="progress-pill" id="progress-pill" title="Tasks completed across the visible window">
     <span id="role-badge" style="display:none;font-size:0.78rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;padding:3px 8px;border-radius:4px;color:#fff;margin-right:6px;"></span>
@@ -2731,6 +2750,10 @@ const MEDTRONIC_PAR = [
 
     if (CURRENT_VIEW === 'team') {
       renderTeamStatus();
+      return;
+    }
+    if (CURRENT_ROLE_KEY === 'latisha') {
+      renderLatishaView();
       return;
     }
 
@@ -3677,6 +3700,90 @@ const MEDTRONIC_PAR = [
     });
   }
 
+  // ── Latisha's view: clean upcoming-events list ───────────────────
+  function renderLatishaView() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayKey = ymd(today);
+    const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
+
+    // Filter: Latisha's events (already filtered by isEventVisibleForRole) within window, today + future
+    const upcoming = state.events.filter(evt => {
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      return startKey && startKey >= todayKey && startKey <= horizon;
+    }).sort((a, b) => (a.start_dt || '').localeCompare(b.start_dt || ''));
+
+    // Hero banner
+    const heroHtml = `
+      <div style="background:linear-gradient(135deg,#6a1b9a 0%,#8e24aa 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:18px;box-shadow:0 4px 18px rgba(106,27,154,0.18);">
+        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">Upcoming events</div>
+        <div style="font-size:1.5rem;font-weight:700;margin-bottom:6px;">${upcoming.length === 0 ? "Nothing scheduled yet" : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
+        <div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">Each card below shows the date, location, and the cost center to charge for that day.</div>
+      </div>
+    `;
+
+    if (upcoming.length === 0) {
+      dashEl.innerHTML = heroHtml + `
+        <div style="background:#fff;border-radius:12px;padding:40px 30px;text-align:center;color:#888;font-size:0.95rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div style="font-size:2.2rem;margin-bottom:10px;">📅</div>
+          <div style="font-weight:600;color:#1a1a2e;margin-bottom:6px;">No events tagged with your name yet</div>
+          <div>When Josh schedules you, he'll add your name to the event title in Teamup. Events will show up here automatically.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const cards = upcoming.map(evt => {
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      const startD = parseYMD(startKey);
+      const cat = classifyEvent(evt);
+      const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
+      const subcalName = state.subcalMap[evt.subcalendar_id] || '';
+      const dsmName = detectDsmFromTitle(evt.title);
+      const dsm = dsmName ? dsmByName(dsmName) : dsmByName('Med Ed');
+
+      // Big date chip
+      const dow = DOW_FULL[startD.getDay()];
+      const monthAbbr = MONTHS_SHORT[startD.getMonth()].toUpperCase();
+      const dayNum = startD.getDate();
+      const isToday = startKey === todayKey;
+      const isTomorrow = startKey === ymd(addDays(today, 1));
+      const whenLabel = isToday ? 'TODAY' : isTomorrow ? 'TOMORROW' : dow.toUpperCase();
+      const daysAway = Math.round((startD - today) / 86400000);
+      const awayLabel = isToday ? '' : isTomorrow ? '' : `in ${daysAway} day${daysAway === 1 ? '' : 's'}`;
+
+      return `
+        <div style="background:#fff;border-radius:14px;padding:0;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden;display:flex;${isToday ? 'border:2px solid #6a1b9a;' : ''}">
+          <div style="background:${isToday ? '#6a1b9a' : '#f3e5f5'};color:${isToday ? '#fff' : '#6a1b9a'};padding:18px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px;">
+            <div style="font-size:0.7rem;font-weight:700;letter-spacing:1.2px;">${escapeHtml(whenLabel)}</div>
+            <div style="font-size:2.2rem;font-weight:700;line-height:1;margin:4px 0;">${dayNum}</div>
+            <div style="font-size:0.78rem;font-weight:600;letter-spacing:0.4px;">${escapeHtml(monthAbbr)}</div>
+            ${awayLabel ? `<div style="font-size:0.7rem;margin-top:6px;opacity:0.75;">${escapeHtml(awayLabel)}</div>` : ''}
+          </div>
+          <div style="padding:18px 24px;flex:1;">
+            <div style="font-size:1.05rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">${escapeHtml(evt.title || '(untitled)')}</div>
+            ${subcalName ? `<div style="margin-bottom:8px;"><span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:#eef2fb;color:#003da5;text-transform:uppercase;">${escapeHtml(subcalName)}</span></div>` : ''}
+            <div style="font-size:0.88rem;color:#666;margin-top:6px;">
+              💰 <strong>Charge to:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:#6a1b9a;font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn-add-custom" data-date="${escapeHtml(startKey)}" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px dashed #6a1b9a;color:#6a1b9a;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add personal note</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    dashEl.innerHTML = heroHtml + cards;
+
+    // Wire add-custom buttons
+    dashEl.querySelectorAll('.btn-add-custom').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        openCustomTaskModal(btn.getAttribute('data-date'), btn.getAttribute('data-event-id') || null);
+      });
+    });
+  }
+
   // ── Fetch from Teamup ──────────────────────────────────────────────
   async function fetchEvents() {
     const today = new Date();
@@ -4057,6 +4164,9 @@ const MEDTRONIC_PAR = [
     // View switcher only on master
     const viewSwitch = document.getElementById('view-switcher');
     if (viewSwitch) viewSwitch.style.display = (CURRENT_ROLE_KEY === 'master') ? 'inline-flex' : 'none';
+    // Team-links bar only on master
+    const teamLinksBar = document.getElementById('team-links-bar');
+    if (teamLinksBar) teamLinksBar.style.display = (CURRENT_ROLE_KEY === 'master') ? 'block' : 'none';
     // Mark active view tab
     document.querySelectorAll('.view-tab').forEach(t => {
       t.classList.toggle('active', t.getAttribute('data-view') === CURRENT_VIEW);

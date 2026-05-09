@@ -4,11 +4,7 @@ Two static HTML apps that live in the same folder and read from the same Teamup 
 
 ## Apps
 
-### 1. ENT Immersion Lab Booking — `ENT_Immersion_Lab_Booking.html`
-
-The public-facing booking page used by ENT sales reps to claim an "Open ENT Immersion Lab" slot. Reps pick from available dates, fill in their info, and the app updates the matching Teamup event title (`Open ENT Immersion Lab` → `ENT Immersion Lab — Dr. X — Rep Y`) so it lands in the manager dashboard with all the prep tasks attached.
-
-### 2. Jacksonville Lab Manager Dashboard — `Jacksonville_Lab_Manager_Dashboard.html`
+### Jacksonville Lab Manager Dashboard — `Jacksonville_Lab_Manager_Dashboard.html`
 
 The internal ops dashboard. Pulls the Jacksonville sub-calendar live, classifies every event by type (Lab, Training, R&D, Specimen Delivery/Pickup, Cleanup, Install, etc.), and generates a multi-day prep checklist for each one. Includes a Medtronic catalog (209+ part numbers), pre/post-event restock email generator, daily ops checklists, two par-check systems, and a cadaver log.
 
@@ -46,11 +42,10 @@ Then on GitHub:
 2. Source: `Deploy from a branch`, Branch: `main`, Folder: `/ (root)`
 3. Save. Site appears at `https://YOUR_USERNAME.github.io/REPO_NAME/`
 
-Each app is reachable at:
+Reachable at:
 - `https://YOUR_USERNAME.github.io/REPO_NAME/Jacksonville_Lab_Manager_Dashboard.html`
-- `https://YOUR_USERNAME.github.io/REPO_NAME/ENT_Immersion_Lab_Booking.html`
 
-To make the dashboard the default landing page, rename it to `index.html`. Or add a small `index.html` that links to both.
+The ENT Immersion Lab Booking app (used by sales reps to claim slots) is **deployed separately** at https://ent-immersion-labs.github.io/ and is not part of this repo. Don't touch that one — it's already in production.
 
 **This repo MUST be private.** It contains:
 - A Teamup API read+write token
