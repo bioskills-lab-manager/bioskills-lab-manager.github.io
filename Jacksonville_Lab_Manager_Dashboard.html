@@ -2899,26 +2899,25 @@ const MEDTRONIC_PAR = [
       });
     });
 
-    // Wire up the hero "Show N more events" / "Show less" toggle
-    dashEl.querySelectorAll('.btn-hero-expand').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const extra = btn.previousElementSibling;
-        if (!extra || !extra.classList.contains('hero-extra-events')) return;
-        const isHidden = extra.style.display === 'none' || !extra.style.display;
-        if (isHidden) {
-          extra.style.display = 'block';
-          // Re-render the button label
-          const more = extra.children.length;
-          btn.innerHTML = `Show less ↑`;
-        } else {
-          extra.style.display = 'none';
-          const more = extra.children.length;
-          btn.innerHTML = `Show ${more} more event${more === 1 ? '' : 's'} ↓`;
-        }
+    // Hero "Show more / Show less" — there's a top button (in hero banner)
+    // AND a bottom button. Both share class .btn-hero-expand and sync on click.
+    const heroToggleBtns = dashEl.querySelectorAll('.btn-hero-expand');
+    const heroExtra = dashEl.querySelector('.hero-extra-events');
+    if (heroToggleBtns.length && heroExtra) {
+      const moreCount = heroExtra.children.length;
+      const moreLabel = `Show ${moreCount} more ↓`;
+      const lessLabel = `Show less ↑`;
+      heroToggleBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const isHidden = heroExtra.style.display === 'none' || !heroExtra.style.display;
+          heroExtra.style.display = isHidden ? 'block' : 'none';
+          const newLabel = isHidden ? lessLabel : moreLabel;
+          heroToggleBtns.forEach(b => { b.innerHTML = newLabel; });
+        });
       });
-    });
+    }
 
     // Wire up Custom Task Delete buttons
     dashEl.querySelectorAll('.btn-custom-delete').forEach(btn => {
@@ -3775,11 +3774,27 @@ const MEDTRONIC_PAR = [
     const subtitle = options.subtitle === undefined
       ? 'Each card shows the date, location, and the cost center to charge for that day.'
       : options.subtitle;
+
+    // Pre-compute collapse so hero banner can include a top toggle too
+    const collapseAfter = options.collapsibleAfter;
+    const willCollapse = collapseAfter && upcoming.length > collapseAfter;
+    const moreCount = willCollapse ? (upcoming.length - collapseAfter) : 0;
+    const headerToggleHtml = willCollapse ? `
+      <button type="button" class="btn-hero-expand"
+              style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:0.78rem;font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+        Show ${moreCount} more ↓
+      </button>` : '';
+
     const heroHtml = `
       <div style="background:linear-gradient(135deg,${accentHex} 0%,${accentHexEnd} 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:18px;box-shadow:0 4px 18px rgba(${accent},0.18);">
-        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">${escapeHtml(options.eyebrow || 'Upcoming events')}</div>
-        <div style="font-size:1.5rem;font-weight:700;${subtitle ? 'margin-bottom:6px;' : ''}">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
-        ${subtitle ? `<div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(subtitle)}</div>` : ''}
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:240px;">
+            <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">${escapeHtml(options.eyebrow || 'Upcoming events')}</div>
+            <div style="font-size:1.5rem;font-weight:700;${subtitle ? 'margin-bottom:6px;' : ''}">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
+            ${subtitle ? `<div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(subtitle)}</div>` : ''}
+          </div>
+          ${headerToggleHtml}
+        </div>
       </div>
     `;
 
@@ -3839,20 +3854,19 @@ const MEDTRONIC_PAR = [
       `;
     });
 
-    // Collapsible: if collapsibleAfter is set, show first N cards visible,
-    // wrap the rest in a hidden div with a toggle button.
-    const collapseAfter = options.collapsibleAfter;
+    // Collapsible: if willCollapse, render first N visible + rest hidden +
+    // a bottom toggle button. The hero banner already has a matching top
+    // toggle button; both share class .btn-hero-expand and sync on click.
     let cards;
-    if (collapseAfter && cardArray.length > collapseAfter) {
+    if (willCollapse) {
       const visible = cardArray.slice(0, collapseAfter).join('');
-      const hidden = cardArray.slice(collapseAfter).join('');
-      const moreCount = cardArray.length - collapseAfter;
+      const hidden  = cardArray.slice(collapseAfter).join('');
       cards = `
         ${visible}
         <div class="hero-extra-events" style="display:none;">${hidden}</div>
-        <button type="button" class="btn-hero-expand" data-action="expand"
+        <button type="button" class="btn-hero-expand"
                 style="display:block;margin:0 auto 14px;background:#fff;border:1.5px solid ${options.accentHex || '#003da5'};color:${options.accentHex || '#003da5'};font-size:0.82rem;font-weight:700;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;">
-          Show ${moreCount} more event${moreCount === 1 ? '' : 's'} ↓
+          Show ${moreCount} more ↓
         </button>
       `;
     } else {
