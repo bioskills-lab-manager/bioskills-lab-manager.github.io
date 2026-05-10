@@ -2972,8 +2972,8 @@ const MEDTRONIC_PAR = [
     document.querySelectorAll('.timing-chip').forEach(el => {
       el.classList.toggle('active', el.getAttribute('data-timing') === timing);
     });
-    // Sync subject prefix if a subject is already filled in by openRestockModal
-    if (restockState.event && modalSubject.value) {
+    // Sync subject prefix — but Bert always uses a fixed subject so leave his alone.
+    if (CURRENT_ROLE_KEY !== 'bert' && restockState.event && modalSubject.value) {
       const prefix = timing === 'pre' ? 'Order Request' : 'Restock Request';
       modalSubject.value = modalSubject.value.replace(/^(Restock Request|Order Request)/, prefix);
     }
@@ -3240,9 +3240,13 @@ const MEDTRONIC_PAR = [
     const defaultTiming = eventD < today ? 'post' : 'pre';
     setTimingChip(defaultTiming);
 
-    // Subject reflects timing
-    const subjPrefix = defaultTiming === 'pre' ? 'Order Request' : 'Restock Request';
-    modalSubject.value = `${subjPrefix} — ${cc.fromLab} — ${tmpl.label} — ${eventDateStr}`;
+    // Subject — Bert uses a fixed line; master gets the dynamic one.
+    if (CURRENT_ROLE_KEY === 'bert') {
+      modalSubject.value = 'Cost Center Order Request — Jacksonville Lab';
+    } else {
+      const subjPrefix = defaultTiming === 'pre' ? 'Order Request' : 'Restock Request';
+      modalSubject.value = `${subjPrefix} — ${cc.fromLab} — ${tmpl.label} — ${eventDateStr}`;
+    }
 
     // Determine DSM:
     // 1. If we already saved a choice for this event, use it
