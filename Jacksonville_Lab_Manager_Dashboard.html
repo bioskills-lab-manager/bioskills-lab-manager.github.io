@@ -3488,9 +3488,11 @@ const MEDTRONIC_PAR = [
     restockState.event = evt;
     restockState.category = category;
 
-    // For Lab events, look up the saved variant (or default)
-    const isLab = category === 'lab';
-    if (isLab) {
+    // Show the Lab Variant dropdown for Lab events AND for the toolbar
+    // Customer Service shortcut (synthetic 'inventory' category) so Bert
+    // can pick "3-Station Lab" etc. and get the per-station kit.
+    const showVariantPicker = (category === 'lab' || category === 'inventory');
+    if (showVariantPicker) {
       const savedVariant = (evt.id && loadVariantPrefs()[evt.id]) || 'default';
       const variant = LAB_VARIANTS[savedVariant] ? savedVariant : 'default';
       restockState.variant = variant;
