@@ -933,6 +933,7 @@ const ROLES = {
     name:               "Latisha",
     label:              "Contractor — Assigned Events",
     color:              "#6a1b9a",
+    taskRoleFilter:     "latisha",      // tasks tagged roles:["latisha"] show for her
     eventFilterKey:     "latisha",      // only events whose title contains "latisha"
     showDailyOps:       false,
     showParCheck:       false,
@@ -1631,7 +1632,8 @@ const EMAIL_TEMPLATES = {
 };
 
 // Closing block (appended after items table + optional notes)
-const EMAIL_CLOSING_TEMPLATE = "Thanks,\n{contactName}\n{contactEmail}{?contactPhone  ·  {contactPhone}}\n{fromLab}";
+// {?contactEmail \n{contactEmail}} so an empty email doesn't leave a blank line.
+const EMAIL_CLOSING_TEMPLATE = "Thanks,\n{contactName}{?contactEmail \n{contactEmail}}{?contactPhone  ·  {contactPhone}}\n{fromLab}";
 
 // Render a template with placeholders. Supports {var} and {?var text}.
 // Conditional separator is exactly ONE whitespace, so a leading space inside
@@ -2446,12 +2448,17 @@ const MEDTRONIC_PAR = [
 
     // 1) Event-derived tasks (any past date < today)
     state.events.forEach(evt => {
+      // Mirror the same three filters buildDays uses, otherwise Bert/Latisha
+      // see overdue items for events they can't see in their day view.
+      if (!isEventVisibleForRole(evt)) return;
+      if (CURRENT_ROLE_KEY === 'bert' && evt.subcalendar_id !== ADMIN_CONFIG.jacksonvilleSubcalId) return;
       const startKey = (evt.start_dt || '').slice(0, 10);
       if (!startKey) return;
       const startD = parseYMD(startKey);
       const cat = classifyEvent(evt);
       const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
       tmpl.tasks.forEach(task => {
+        if (!isTaskVisibleForRole(task)) return;
         const taskDate = addDays(startD, -task.offset);
         const taskKey = ymd(taskDate);
         if (taskKey >= todayKey || taskKey < earliestKey) return;
@@ -2667,10 +2674,13 @@ const MEDTRONIC_PAR = [
       const showRestockBtn = CURRENT_ROLE.showRestockEmail
                           && (catalog.length > 0 || hasTemplate)
                           && day.dateKey === group.eventDate;
-      // Pick verb based on whether the event is upcoming or past
+      // Pick verb based on whether the event is upcoming or past — pre-event
+      // is an order request, post-event is a restock request.
       const today = new Date(); today.setHours(0,0,0,0);
       const evtDate = parseYMD(group.eventDate);
-      const buttonLabel = evtDate < today ? 'Generate Customer Service email' : 'Generate Customer Service email';
+      const buttonLabel = evtDate < today
+        ? 'Generate restock email — Customer Service'
+        : 'Generate order email — Customer Service';
       const restockBtnHtml = showRestockBtn ? `
         <button class="btn-restock" data-event-id="${escapeHtml(String(group.eventId))}" data-category="${escapeHtml(group.category)}" type="button">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 14h8"/></svg>
@@ -3722,12 +3732,12 @@ const MEDTRONIC_PAR = [
   // Pivot data by event. Each event card shows per-person task progress
   // (Ana Maria | Bert | Universal). Tasks are clickable to mark done.
   function buildEventTaskMap(evt) {
-    // Returns { ana: [tasks], bert: [tasks], universal: [tasks] }
+    // Returns { ana: [tasks], bert: [tasks], latisha: [tasks], universal: [tasks] }
     const cat = classifyEvent(evt);
     const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
     const startKey = (evt.start_dt || '').slice(0, 10);
     const startD = parseYMD(startKey);
-    const buckets = { ana: [], bert: [], universal: [] };
+    const buckets = { ana: [], bert: [], latisha: [], universal: [] };
     tmpl.tasks.forEach(task => {
       const taskDate = addDays(startD, -task.offset);
       const t = {
@@ -3747,6 +3757,7 @@ const MEDTRONIC_PAR = [
       } else {
         if (rolesArr.includes('anamaria')) buckets.ana.push(t);
         if (rolesArr.includes('bert'))     buckets.bert.push(t);
+        if (rolesArr.includes('latisha'))  buckets.latisha.push(t);
       }
     });
     return { category: cat, label: tmpl.label, cssClass: tmpl.cssClass, buckets };
@@ -3818,7 +3829,7 @@ const MEDTRONIC_PAR = [
       const isPast = startKey < todayKey;
       const isSoon = !isPast && (parseYMD(startKey) - today) / 86400000 <= 3;
 
-      const allTasks = [...buckets.ana, ...buckets.bert, ...buckets.universal];
+      const allTasks = [...buckets.ana, ...buckets.bert, ...buckets.latisha, ...buckets.universal];
       const totalCount = allTasks.length;
       const doneCount = allTasks.filter(t => isChecked(t.checkKey)).length;
       const pct = totalCount === 0 ? 0 : Math.round(doneCount / totalCount * 100);
@@ -3876,6 +3887,7 @@ const MEDTRONIC_PAR = [
           <div class="ts-columns">
             ${renderColumn('ana',       'Ana Maria',  ROLES.anamaria.color, buckets.ana)}
             ${renderColumn('bert',      'Bert',       ROLES.bert.color,     buckets.bert)}
+            ${renderColumn('latisha',   'Latisha',    ROLES.latisha.color,  buckets.latisha)}
             ${renderColumn('universal', 'Universal',  '#888',                buckets.universal)}
           </div>
         </div>
@@ -5262,12 +5274,16 @@ const MEDTRONIC_PAR = [
       meriResetSpecimens([{ type: '', qty: '', reqs: '' }]);
     }
 
+    // Use .onchange (not addEventListener) so re-opening the modal doesn't
+    // stack listeners — each open clobbers the previous one.
     if (upcomingLabs.length) {
       applyEventDefaults(upcomingLabs[0]);
-      meriEventSelect.addEventListener('change', () => {
+      meriEventSelect.onchange = () => {
         const evt = upcomingLabs.find(e => String(e.id) === meriEventSelect.value);
         applyEventDefaults(evt);
-      }, { once: false });
+      };
+    } else {
+      meriEventSelect.onchange = null;
     }
 
     meriStatus.textContent = '';
@@ -5357,8 +5373,12 @@ const MEDTRONIC_PAR = [
       set('Text20', 'Medtronic ENT');
       set('Text21', '904-673-5269');
 
-      // Lab/event details
-      set('Text12', (meriEventSelect.options[meriEventSelect.selectedIndex] || {}).text || '');
+      // Lab/event details — only write the title if we actually have a real
+      // event selected (otherwise the "— No upcoming labs —" placeholder
+      // would leak into the PDF).
+      const selectedEventId = meriEventSelect.value;
+      const selectedOpt = meriEventSelect.options[meriEventSelect.selectedIndex];
+      set('Text12', selectedEventId && selectedOpt ? selectedOpt.text : '');
       set('Text53', fmtMeriDate(meriLabDate.value));     // Specimens delivered
       set('Text54', fmtMeriDate(meriNeededDate.value));  // Specimens needed
       set('Text55', fmtMeriDate(meriLabDate.value));     // Lab date
@@ -5403,8 +5423,8 @@ const MEDTRONIC_PAR = [
       const blob = new Blob([filledBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const eventTitle = (meriEventSelect.options[meriEventSelect.selectedIndex] || {}).text || 'Lab';
-      const safeTitle = eventTitle.replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+      const eventTitle = (selectedEventId && selectedOpt) ? selectedOpt.text : 'MERI_Order';
+      const safeTitle = eventTitle.replace(/[^a-z0-9]+/gi, '_').slice(0, 40) || 'MERI_Order';
       a.href = url;
       a.download = `MERI_Order_${safeTitle}_${meriLabDate.value || ymd(new Date())}.pdf`;
       document.body.appendChild(a);
