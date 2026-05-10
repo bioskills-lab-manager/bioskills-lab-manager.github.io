@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Jacksonville Bioskills Lab — Manager Dashboard</title>
+  <!-- pdf-lib for client-side PDF form filling (MERI specimen order form) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <style>
     /* ─── Reset & Base ─────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1834,6 +1836,7 @@ const MEDTRONIC_PAR = [
     </div>
     <button class="btn" id="btn-share-links" type="button" title="Get role-specific share links">🔗 Share links</button>
     <button class="btn" id="btn-cs-email" type="button" title="Compose a Customer Service order email anytime">📧 Email Customer Service</button>
+    <button class="btn" id="btn-meri-form" type="button" title="Generate filled MERI specimen order form">🧬 Order Specimens (MERI)</button>
     <button class="btn" id="btn-cadaver-log" type="button" title="View full cadaver log">📋 Cadaver Log</button>
     <button class="btn" id="btn-collapse" type="button" title="Collapse all days">⌄ Collapse all</button>
     <button class="btn primary" id="btn-refresh" type="button">↻ Refresh</button>
@@ -2060,6 +2063,76 @@ const MEDTRONIC_PAR = [
     <div class="modal-footer">
       <button class="btn" id="custom-task-cancel" type="button">Cancel</button>
       <button class="btn primary" id="custom-task-save" type="button">Add task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MERI Specimen Order Form Modal ──────────────────────────────── -->
+<div class="modal-backdrop" id="meri-modal">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header">
+      <h3>🧬 MERI Specimen Order Form</h3>
+      <button class="modal-close" id="meri-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:0.85rem;color:#666;margin-bottom:14px;background:#f4f6f9;border-radius:8px;padding:10px 14px;">
+        Pick an upcoming lab and adjust fields below. Generates a filled MERI form ready to attach to your email.
+      </div>
+
+      <label for="meri-event">Lab event</label>
+      <select id="meri-event" style="width:100%;border:1.5px solid #d0d8e8;border-radius:8px;padding:10px 12px;font-size:0.92rem;font-family:inherit;outline:none;color:#1a1a2e;background:#fff;"></select>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <div>
+          <label for="meri-lab-date">Lab date</label>
+          <input type="date" id="meri-lab-date" />
+        </div>
+        <div>
+          <label for="meri-needed-date">Specimens needed by</label>
+          <input type="date" id="meri-needed-date" />
+        </div>
+        <div>
+          <label for="meri-start-time">Lab start</label>
+          <input type="text" id="meri-start-time" placeholder="9:00 AM" />
+        </div>
+        <div>
+          <label for="meri-end-time">Lab end</label>
+          <input type="text" id="meri-end-time" placeholder="4:00 PM" />
+        </div>
+      </div>
+
+      <label for="meri-lab-name" style="margin-top:12px;">Lab location name</label>
+      <input type="text" id="meri-lab-name" placeholder="Jacksonville Bioskills Lab — Attn: Bert Clark" />
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label for="meri-lab-street">Street address</label>
+          <input type="text" id="meri-lab-street" />
+        </div>
+        <div>
+          <label for="meri-lab-citystate">City, State, Zip</label>
+          <input type="text" id="meri-lab-citystate" />
+        </div>
+      </div>
+
+      <label for="meri-procedure" style="margin-top:12px;">Procedure description</label>
+      <textarea id="meri-procedure" placeholder="e.g. ENT cadaveric education lab — FESS, temporal bone drilling, etc. # of stations and equipment overview." style="min-height:70px;"></textarea>
+
+      <h4 style="font-size:0.78rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#888;margin-top:16px;margin-bottom:6px;">Specimens requested</h4>
+      <div id="meri-specimens" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <button type="button" id="meri-add-specimen" style="margin-top:6px;background:#fff;border:1.5px dashed #003da5;color:#003da5;font-size:0.78rem;font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add specimen line</button>
+
+      <label for="meri-special-reqs" style="margin-top:12px;">Special requirements / preparation notes</label>
+      <textarea id="meri-special-reqs" placeholder="e.g. Cephalus Medtronic Nav Protocol, frozen vs fresh, prior surgery exclusions" style="min-height:50px;"></textarea>
+
+      <label for="meri-equipment" style="margin-top:12px;">Equipment list (optional)</label>
+      <textarea id="meri-equipment" placeholder="Leave blank or list any non-standard equipment provided by MERI" style="min-height:50px;"></textarea>
+
+      <div id="meri-status" style="font-size:0.82rem;color:#888;margin-top:10px;min-height:1.4em;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="meri-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="meri-generate" type="button">Generate filled PDF →</button>
     </div>
   </div>
 </div>
@@ -4964,6 +5037,14 @@ const MEDTRONIC_PAR = [
     // Hide cadaver log button for roles that don't see it
     const cadBtn = document.getElementById('btn-cadaver-log');
     if (cadBtn) cadBtn.style.display = CURRENT_ROLE.showCadaverLog ? '' : 'none';
+    // MERI specimen order form — Master + Ana Maria
+    const meriBtn = document.getElementById('btn-meri-form');
+    if (meriBtn) {
+      const showMeri = (CURRENT_ROLE_KEY === 'master' || CURRENT_ROLE_KEY === 'anamaria');
+      meriBtn.style.display = showMeri ? '' : 'none';
+      if (showMeri) meriBtn.addEventListener('click', openMeriModal);
+    }
+
     // Customer Service email shortcut — Master + Bert only
     const csBtn = document.getElementById('btn-cs-email');
     if (csBtn) {
@@ -5070,6 +5151,244 @@ const MEDTRONIC_PAR = [
       }
     });
   }
+
+  // ── MERI Specimen Order Form ─────────────────────────────────────
+  // Defaults & constants for the Jacksonville lab. Cadavers ship to 6703
+  // (NOT 6743 — that's product). All addressed to Bert Clark.
+  const MERI_DEFAULTS = {
+    labName:       'Jacksonville Bioskills Lab — Attn: Bert Clark',
+    labStreet:     '6703 Southpoint Drive North',
+    labCityState:  'Jacksonville, FL 32216',
+    labStartTime:  '9:00 AM',
+    labEndTime:    '4:00 PM',
+    procedure:     '',
+    specialReqs:   '',
+    equipment:     '',  // intentionally empty per Josh — Ana fills per order
+    facilityDesc:  'Jacksonville Bioskills Lab is a professional surgical training facility located at 6703 Southpoint Drive North, Jacksonville, FL. The facility features designated lab space, lockable doors with restricted access, non-porous surfaces, working sinks, proper drainage, OSHA-compliant ventilation, and designated lockable refrigeration for tissue storage.',
+  };
+
+  const meriModal       = document.getElementById('meri-modal');
+  const meriEventSelect = document.getElementById('meri-event');
+  const meriLabDate     = document.getElementById('meri-lab-date');
+  const meriNeededDate  = document.getElementById('meri-needed-date');
+  const meriStartTime   = document.getElementById('meri-start-time');
+  const meriEndTime     = document.getElementById('meri-end-time');
+  const meriLabName     = document.getElementById('meri-lab-name');
+  const meriLabStreet   = document.getElementById('meri-lab-street');
+  const meriLabCityState= document.getElementById('meri-lab-citystate');
+  const meriProcedure   = document.getElementById('meri-procedure');
+  const meriSpecimensEl = document.getElementById('meri-specimens');
+  const meriAddSpec     = document.getElementById('meri-add-specimen');
+  const meriSpecialReqs = document.getElementById('meri-special-reqs');
+  const meriEquipment   = document.getElementById('meri-equipment');
+  const meriStatus      = document.getElementById('meri-status');
+  const meriClose       = document.getElementById('meri-close');
+  const meriCancel      = document.getElementById('meri-cancel');
+  const meriGenerate    = document.getElementById('meri-generate');
+
+  function meriRenderSpecimenRow(idx, type, qty, reqs) {
+    return `
+      <div class="meri-spec-row" data-idx="${idx}" style="display:grid;grid-template-columns:2fr 70px 2fr 30px;gap:6px;align-items:center;">
+        <input type="text" class="meri-spec-type" placeholder="Specimen type (e.g. Cephalus with CT)" value="${escapeHtml(type || '')}" style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 9px;font-size:0.85rem;font-family:inherit;" />
+        <input type="number" class="meri-spec-qty" placeholder="Qty" min="0" value="${qty != null ? qty : ''}" style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 9px;font-size:0.85rem;font-family:inherit;text-align:center;" />
+        <input type="text" class="meri-spec-reqs" placeholder="Specs / requirements" value="${escapeHtml(reqs || '')}" style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 9px;font-size:0.85rem;font-family:inherit;" />
+        <button type="button" class="meri-spec-remove" title="Remove" style="background:none;border:none;color:#c1281a;cursor:pointer;font-size:1rem;padding:0;">×</button>
+      </div>
+    `;
+  }
+  function meriResetSpecimens(rows) {
+    rows = rows && rows.length ? rows : [{ type: '', qty: '', reqs: '' }];
+    meriSpecimensEl.innerHTML = rows.map((r, i) => meriRenderSpecimenRow(i, r.type, r.qty, r.reqs)).join('');
+    meriSpecimensEl.querySelectorAll('.meri-spec-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (meriSpecimensEl.querySelectorAll('.meri-spec-row').length <= 1) return;
+        btn.closest('.meri-spec-row').remove();
+      });
+    });
+  }
+  meriAddSpec && meriAddSpec.addEventListener('click', () => {
+    const next = meriSpecimensEl.querySelectorAll('.meri-spec-row').length;
+    meriSpecimensEl.insertAdjacentHTML('beforeend', meriRenderSpecimenRow(next, '', '', ''));
+    const newRow = meriSpecimensEl.lastElementChild;
+    newRow.querySelector('.meri-spec-remove').addEventListener('click', () => newRow.remove());
+  });
+
+  function fmtMeriDate(yyyy_mm_dd) {
+    if (!yyyy_mm_dd) return '';
+    const [y, m, d] = yyyy_mm_dd.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return `${DOW_FULL[dt.getDay()]} ${MONTHS[m - 1]} ${d}, ${y}`;
+  }
+
+  function openMeriModal() {
+    // Build event picker from upcoming Lab events (today + 60 days)
+    const today = new Date(); today.setHours(0,0,0,0);
+    const upcomingLabs = state.events.filter(evt => {
+      const k = (evt.start_dt || '').slice(0, 10);
+      if (!k || k < ymd(today)) return false;
+      const cat = classifyEvent(evt);
+      return cat === 'lab' || cat === 'training' || cat === 'rd';
+    }).sort((a, b) => (a.start_dt || '').localeCompare(b.start_dt || ''));
+
+    if (!upcomingLabs.length) {
+      meriEventSelect.innerHTML = `<option value="">— No upcoming lab events found —</option>`;
+    } else {
+      meriEventSelect.innerHTML = upcomingLabs.map(evt => {
+        const k = (evt.start_dt || '').slice(0, 10);
+        const d = parseYMD(k);
+        const label = `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()} — ${evt.title || '(untitled)'}`;
+        return `<option value="${escapeHtml(String(evt.id))}">${escapeHtml(label)}</option>`;
+      }).join('');
+    }
+
+    function applyEventDefaults(evt) {
+      if (!evt) return;
+      const k = (evt.start_dt || '').slice(0, 10);
+      const d = parseYMD(k);
+      // Specimens needed by = lab date - 1 day
+      const needed = addDays(d, -1);
+      meriLabDate.value    = k;
+      meriNeededDate.value = ymd(needed);
+      meriStartTime.value  = MERI_DEFAULTS.labStartTime;
+      meriEndTime.value    = MERI_DEFAULTS.labEndTime;
+      meriLabName.value      = MERI_DEFAULTS.labName;
+      meriLabStreet.value    = MERI_DEFAULTS.labStreet;
+      meriLabCityState.value = MERI_DEFAULTS.labCityState;
+      // Build a starter procedure description from the event
+      const surgeon = detectSurgeonFromTitle(evt.title);
+      meriProcedure.value = `ENT cadaveric education lab — ${evt.title || ''}${surgeon ? ' with ' + surgeon : ''}.`;
+      meriSpecialReqs.value = '';
+      meriEquipment.value   = MERI_DEFAULTS.equipment;
+      meriResetSpecimens([{ type: 'Cephalus with Torso (CT scan, no previous sinus surgery)', qty: '', reqs: '' }]);
+    }
+
+    if (upcomingLabs.length) {
+      applyEventDefaults(upcomingLabs[0]);
+      meriEventSelect.addEventListener('change', () => {
+        const evt = upcomingLabs.find(e => String(e.id) === meriEventSelect.value);
+        applyEventDefaults(evt);
+      }, { once: false });
+    }
+
+    meriStatus.textContent = '';
+    meriModal.classList.add('open');
+  }
+
+  meriClose && meriClose.addEventListener('click', () => meriModal.classList.remove('open'));
+  meriCancel && meriCancel.addEventListener('click', () => meriModal.classList.remove('open'));
+  meriModal && meriModal.addEventListener('click', (e) => { if (e.target === meriModal) meriModal.classList.remove('open'); });
+
+  meriGenerate && meriGenerate.addEventListener('click', async () => {
+    if (typeof PDFLib === 'undefined') {
+      meriStatus.textContent = '⚠ pdf-lib not loaded — refresh the page and try again.';
+      return;
+    }
+    meriStatus.textContent = 'Filling form…';
+    meriGenerate.disabled = true;
+    try {
+      // Collect current specimen rows
+      const specs = Array.from(meriSpecimensEl.querySelectorAll('.meri-spec-row')).map(row => ({
+        type: row.querySelector('.meri-spec-type').value.trim(),
+        qty:  row.querySelector('.meri-spec-qty').value.trim(),
+        reqs: row.querySelector('.meri-spec-reqs').value.trim(),
+      })).filter(s => s.type || s.qty);
+
+      const { PDFDocument } = PDFLib;
+      const blankBytes = await fetch('meri-form-template.pdf').then(r => {
+        if (!r.ok) throw new Error('Could not load meri-form-template.pdf');
+        return r.arrayBuffer();
+      });
+      const pdfDoc = await PDFDocument.load(blankBytes);
+      const form   = pdfDoc.getForm();
+
+      const set = (name, value) => {
+        try {
+          const f = form.getTextField(name);
+          if (f && value != null) f.setText(String(value));
+        } catch (e) { /* field doesn't exist or wrong type — skip */ }
+      };
+
+      // Constants
+      set('Text11', 'Medtronic');
+      set('Text13', 'Josh Register');
+      set('Text14', '904-631-2062');
+      set('Text16', 'ENT Medical Education');
+      set('Text19', 'josh.register@medtronic.com');
+      set('Text22', 'On File');
+      // MERI rep block
+      set('Text34', 'Amanda Smith');
+      set('Text35', '978-886-8268');
+
+      // Lab location (default Jax — Ana can override per order)
+      set('Text36', meriLabName.value);
+      set('Text37', meriLabStreet.value);
+      set('Text38', meriLabCityState.value);
+      // Manager address (always Jax cadaver address)
+      set('Text17', '6703 Southpoint Drive North');
+      set('Text18', 'Jacksonville, FL 32216');
+
+      // Lab/event details
+      set('Text12', (meriEventSelect.options[meriEventSelect.selectedIndex] || {}).text || '');
+      set('Text53', fmtMeriDate(meriLabDate.value));     // Specimens delivered
+      set('Text54', fmtMeriDate(meriNeededDate.value));  // Specimens needed
+      set('Text55', fmtMeriDate(meriLabDate.value));     // Lab date
+      set('Text56', meriStartTime.value);
+      set('Text57', meriEndTime.value);
+      set('Text58', MERI_DEFAULTS.facilityDesc);
+      set('Text66', meriProcedure.value);
+
+      // Specimens — first row goes into the "primary" fields, additional rows
+      // populate the duplicate field set used for additional lines
+      if (specs[0]) {
+        set('Text67', specs[0].type);
+        set('Text69', specs[0].qty);
+        set('Text70', specs[0].reqs || meriSpecialReqs.value);
+      }
+      if (specs[1]) {
+        set('Text681', specs[1].type);
+        set('Text691', specs[1].qty);
+        set('Text721', specs[1].reqs);
+      }
+      if (specs[2]) {
+        set('Text682', specs[2].type);
+        set('Text692', specs[2].qty);
+        set('Text722', specs[2].reqs);
+      }
+
+      // Equipment list — left blank by default per request
+      set('Text73', meriEquipment.value);
+
+      // Signer block
+      set('Text74', 'Medtronic');
+      set('Text75', 'Josh Register');
+      set('Text76', 'Sr. Manager, ENT Medical Education');
+      const todayStr = (() => {
+        const t = new Date();
+        return `${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}/${t.getFullYear()}`;
+      })();
+      set('Date80_af_date', todayStr);
+
+      // Save & download
+      const filledBytes = await pdfDoc.save();
+      const blob = new Blob([filledBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const eventTitle = (meriEventSelect.options[meriEventSelect.selectedIndex] || {}).text || 'Lab';
+      const safeTitle = eventTitle.replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+      a.href = url;
+      a.download = `MERI_Order_${safeTitle}_${meriLabDate.value || ymd(new Date())}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      meriStatus.innerHTML = '✓ PDF downloaded — attach it to your email to MERI.';
+    } catch (err) {
+      console.error(err);
+      meriStatus.textContent = '⚠ Could not generate PDF: ' + err.message;
+    } finally {
+      meriGenerate.disabled = false;
+    }
+  });
 
   // ── Wire up toolbar ────────────────────────────────────────────────
   refreshBtn.addEventListener('click', () => {
