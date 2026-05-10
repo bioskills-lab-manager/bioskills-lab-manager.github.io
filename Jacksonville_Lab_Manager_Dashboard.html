@@ -849,6 +849,8 @@
     }
 
     @media (max-width: 700px) {
+      /* Home view: stack calendar above today's to-do */
+      .home-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
       header { padding: 20px 16px 18px; }
       header .title-block h1 { font-size: 1.2rem; }
       .toolbar { padding: 0 14px; gap: 10px; }
@@ -945,12 +947,15 @@ function getCurrentRoleKey() {
 const CURRENT_ROLE_KEY = getCurrentRoleKey();
 const CURRENT_ROLE = ROLES[CURRENT_ROLE_KEY];
 
-// Read view from URL (?view=team or ?view=calendar) — default to day.
-// Team Status is master-only. Calendar is available to everyone.
+// Read view from URL (?view=...) — default to home.
+// home     = calendar + today's to-do side-by-side (DEFAULT)
+// day      = full day-by-day list
+// calendar = full-width calendar grid
+// team     = master-only event-pivot
 function getCurrentView() {
-  const p = new URLSearchParams(window.location.search).get('view') || 'day';
-  if (p === 'team' && CURRENT_ROLE_KEY !== 'master') return 'day';
-  return ['day', 'team', 'calendar'].includes(p) ? p : 'day';
+  const p = new URLSearchParams(window.location.search).get('view') || 'home';
+  if (p === 'team' && CURRENT_ROLE_KEY !== 'master') return 'home';
+  return ['home', 'day', 'team', 'calendar'].includes(p) ? p : 'home';
 }
 const CURRENT_VIEW = getCurrentView();
 
@@ -1819,6 +1824,7 @@ const MEDTRONIC_PAR = [
   <div class="actions">
     <!-- View switcher -->
     <div class="view-switcher" id="view-switcher" style="display:none;background:#fff;border:1.5px solid #d0d8e8;border-radius:8px;padding:3px;display:none;gap:0;">
+      <a class="view-tab" id="view-tab-home"     href="#" data-view="home"     style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">🏠 Home</a>
       <a class="view-tab" id="view-tab-day"      href="#" data-view="day"      style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📋 Day-by-day</a>
       <a class="view-tab" id="view-tab-calendar" href="#" data-view="calendar" style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📅 Calendar</a>
       <a class="view-tab" id="view-tab-team"     href="#" data-view="team"     style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">👥 Team Status</a>
@@ -2049,12 +2055,7 @@ const MEDTRONIC_PAR = [
       <input type="date" id="custom-task-date" />
       <div id="custom-task-assignee-row" style="display:none;">
         <label for="custom-task-assignee">Assign to</label>
-        <select id="custom-task-assignee" style="width:100%;border:1.5px solid #d0d8e8;border-radius:8px;padding:10px 12px;font-size:0.92rem;background:#fff;font-family:inherit;outline:none;color:#1a1a2e;">
-          <option value="master">Just me (Josh)</option>
-          <option value="bert">Bert Clark</option>
-          <option value="anamaria">Ana Maria Rojas</option>
-          <option value="latisha">Latisha</option>
-        </select>
+        <select id="custom-task-assignee" style="width:100%;border:1.5px solid #d0d8e8;border-radius:8px;padding:10px 12px;font-size:0.92rem;background:#fff;font-family:inherit;outline:none;color:#1a1a2e;"></select>
       </div>
     </div>
     <div class="modal-footer">
@@ -2808,6 +2809,10 @@ const MEDTRONIC_PAR = [
       renderCalendarView();
       return;
     }
+    if (CURRENT_VIEW === 'home') {
+      renderHomeView();
+      return;
+    }
     if (CURRENT_ROLE_KEY === 'latisha') {
       renderLatishaView();
       return;
@@ -2848,7 +2853,11 @@ const MEDTRONIC_PAR = [
     }
 
     dashEl.innerHTML = upcomingHero + visibleDays.map(renderDay).join('');
+    wireDayViewControls();
+  }
 
+  // ── Day-view control wiring (extracted for reuse by renderAll + renderHomeView) ──
+  function wireDayViewControls() {
     // Wire up checkbox toggles
     dashEl.querySelectorAll('label.task').forEach(lbl => {
       lbl.addEventListener('change', (e) => {
@@ -3986,18 +3995,119 @@ const MEDTRONIC_PAR = [
     });
   }
 
-  // ── Calendar Grid View ───────────────────────────────────────────
-  // Month-style 5-week grid starting from current week. Each event renders
-  // as a colored chip in its day cell. Click any chip → event detail modal.
-  function renderCalendarView() {
+  // ── Calendar Grid Renderer ──────────────────────────────────────
+  // buildCalendarGridHtml() returns the calendar HTML; can be reused by
+  // both renderCalendarView (full-width) and renderHomeView (side-by-side).
+  // On phone-sized screens, renders an agenda LIST instead of a 7-col grid.
+  function isMobileViewport() {
+    return window.matchMedia && window.matchMedia('(max-width: 700px)').matches;
+  }
+
+  function buildCalendarAgendaHtml(opts) {
+    // Mobile-friendly: chronological list grouped by date.
+    opts = opts || {};
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayKey = ymd(today);
+    const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
+
+    const evts = state.events.filter(evt => {
+      if (!isEventVisibleForRole(evt)) return false;
+      if (CURRENT_ROLE_KEY === 'bert') {
+        const isJax = evt.subcalendar_id === ADMIN_CONFIG.jacksonvilleSubcalId;
+        const tagged = (evt.who || '').toLowerCase().includes('bert');
+        if (!isJax && !tagged) return false;
+      }
+      const k = (evt.start_dt || '').slice(0, 10);
+      return k && k >= todayKey && k <= horizon;
+    }).sort((a, b) => (a.start_dt || '').localeCompare(b.start_dt || ''));
+
+    const catColor = (cat) => ({
+      lab:'#003da5', training:'#6a1b9a', rd:'#2e7d32',
+      specimenDelivery:'#c2185b', specimenPickup:'#c2185b',
+      cleanup:'#00838f', install:'#558b2f', meeting:'#5d4037',
+      remote:'#90a4ae', hold:'#9e9e9e', closed:'#bdbdbd', other:'#90a4ae',
+    })[cat] || '#90a4ae';
+
+    if (!evts.length) {
+      return `
+        <div style="background:#fff;border-radius:12px;padding:30px 20px;text-align:center;color:#888;font-size:0.9rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div style="font-size:1.8rem;margin-bottom:8px;">📅</div>
+          No upcoming events.
+        </div>
+      `;
+    }
+
+    // Group by date
+    const groups = {};
+    const order = [];
+    evts.forEach(evt => {
+      const k = (evt.start_dt || '').slice(0, 10);
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(evt);
+    });
+
+    const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 30).getMonth()]} ${addDays(today, 30).getDate()}`;
+
+    let html = '';
+    if (!opts.compact) {
+      html += `
+        <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:16px 20px;margin-bottom:14px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Calendar · ${escapeHtml(monthLabel)}</div>
+          <div style="font-size:1.05rem;font-weight:700;">${evts.length} event${evts.length === 1 ? '' : 's'} coming up</div>
+          <div style="font-size:0.82rem;color:rgba(255,255,255,0.85);margin-top:2px;">Tap any event to open its detail page.</div>
+        </div>
+      `;
+    } else {
+      html += `<div style="font-size:0.78rem;font-weight:700;color:#003da5;margin-bottom:8px;">📅 ${escapeHtml(monthLabel)}</div>`;
+    }
+
+    html += `<div style="background:#fff;border-radius:12px;padding:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);">`;
+
+    order.forEach(dateKey => {
+      const d = parseYMD(dateKey);
+      const isToday = dateKey === todayKey;
+      const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+      const dateLabel = isToday
+        ? `Today · ${dow}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`
+        : `${dow}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+      html += `<div style="margin-bottom:10px;">
+        <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:${isToday ? '#003da5' : '#888'};margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #eef1f6;">${escapeHtml(dateLabel)}</div>`;
+      groups[dateKey].forEach(evt => {
+        const cat = classifyEvent(evt);
+        const color = catColor(cat);
+        const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
+        html += `
+          <div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}"
+               style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;background:#f8fafd;margin-bottom:4px;cursor:pointer;border-left:4px solid ${color};">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.88rem;font-weight:600;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(evt.title || '(untitled)')}</div>
+              <div style="font-size:0.72rem;color:#666;margin-top:2px;">${escapeHtml(tmpl.label)}${evt.who ? ` · 👤 ${escapeHtml(evt.who)}` : ''}</div>
+            </div>
+            <div style="font-size:1.2rem;color:#aaa;">›</div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+    });
+
+    html += `</div>`;
+    return html;
+  }
+
+  function buildCalendarGridHtml(opts) {
+    opts = opts || {};
+    const compact = !!opts.compact;
+    // On mobile, switch to agenda list — grid cells are too small to tap.
+    if (isMobileViewport()) {
+      return buildCalendarAgendaHtml(opts);
+    }
     const today = new Date(); today.setHours(0,0,0,0);
     const todayKey = ymd(today);
 
     // Start from the SUNDAY of this week
     const start = new Date(today);
     start.setDate(today.getDate() - today.getDay());
-    // 6 weeks = 42 cells
-    const numWeeks = 6;
+    const numWeeks = compact ? 5 : 6;
     const cells = [];
     for (let i = 0; i < numWeeks * 7; i++) {
       const d = addDays(start, i);
@@ -4005,10 +4115,8 @@ const MEDTRONIC_PAR = [
     }
     const cellByKey = Object.fromEntries(cells.map(c => [c.key, c]));
 
-    // Filter events visible to this role (uses isEventVisibleForRole)
     state.events.forEach(evt => {
       if (!isEventVisibleForRole(evt)) return;
-      // For Bert: include Jax events + events where he's tagged in Who
       if (CURRENT_ROLE_KEY === 'bert') {
         const isJax = evt.subcalendar_id === ADMIN_CONFIG.jacksonvilleSubcalId;
         const tagged = (evt.who || '').toLowerCase().includes('bert');
@@ -4016,7 +4124,6 @@ const MEDTRONIC_PAR = [
       }
       const startKey = (evt.start_dt || '').slice(0, 10);
       const endKey   = (evt.end_dt   || evt.start_dt || '').slice(0, 10);
-      // Place event on each day it spans (inclusive)
       const sd = parseYMD(startKey);
       const ed = parseYMD(endKey);
       const span = Math.max(0, Math.round((ed - sd) / 86400000));
@@ -4026,65 +4133,57 @@ const MEDTRONIC_PAR = [
       }
     });
 
-    // Color map (re-uses the type- color scheme)
     const catColor = (cat) => ({
-      lab:              '#003da5',
-      training:         '#6a1b9a',
-      rd:               '#2e7d32',
-      specimenDelivery: '#c2185b',
-      specimenPickup:   '#c2185b',
-      cleanup:          '#00838f',
-      install:          '#558b2f',
-      meeting:          '#5d4037',
-      remote:           '#90a4ae',
-      hold:             '#9e9e9e',
-      closed:           '#bdbdbd',
-      other:            '#90a4ae',
+      lab:'#003da5', training:'#6a1b9a', rd:'#2e7d32',
+      specimenDelivery:'#c2185b', specimenPickup:'#c2185b',
+      cleanup:'#00838f', install:'#558b2f', meeting:'#5d4037',
+      remote:'#90a4ae', hold:'#9e9e9e', closed:'#bdbdbd', other:'#90a4ae',
     })[cat] || '#90a4ae';
 
-    // Calendar header
-    const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 30).getMonth()]} ${addDays(today, 30).getDate()}`;
     const dayLabels = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 30).getMonth()]} ${addDays(today, 30).getDate()}`;
+    const chipLimit = compact ? 2 : 3;
+    const minCellHeight = compact ? 60 : 90;
+    const chipFontSize = compact ? '0.62rem' : '0.68rem';
+    const dayNumSize = compact ? '0.72rem' : '0.78rem';
 
-    let html = `
-      <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:18px 24px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
-        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Calendar</div>
-        <div style="font-size:1.25rem;font-weight:700;">${escapeHtml(monthLabel)}</div>
-        <div style="font-size:0.85rem;color:rgba(255,255,255,0.85);margin-top:2px;">Click any event chip to open its full detail page.</div>
-      </div>
-      <div style="background:#fff;border-radius:12px;padding:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);">
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
-          ${dayLabels.map(d => `<div style="font-size:0.7rem;font-weight:700;letter-spacing:0.6px;color:#888;text-align:center;padding:4px 0;">${d}</div>`).join('')}
+    let html = '';
+    if (!compact) {
+      html += `
+        <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:18px 24px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Calendar</div>
+          <div style="font-size:1.25rem;font-weight:700;">${escapeHtml(monthLabel)}</div>
+          <div style="font-size:0.85rem;color:rgba(255,255,255,0.85);margin-top:2px;">Click any event chip to open its full detail page.</div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
+      `;
+    }
+    html += `
+      <div style="background:#fff;border-radius:12px;padding:${compact ? '10px' : '12px'};box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+        ${compact ? `<div style="font-size:0.8rem;font-weight:700;color:#003da5;margin-bottom:8px;">📅 ${escapeHtml(monthLabel)}</div>` : ''}
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">
+          ${dayLabels.map(d => `<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.5px;color:#888;text-align:center;padding:3px 0;">${d}</div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">
     `;
 
-    // Cells
     cells.forEach(c => {
       const isToday = c.key === todayKey;
       const isPast = c.key < todayKey;
-      const isOtherMonth = c.date.getMonth() !== today.getMonth() && Math.abs(c.date - today) > 7 * 86400000;
       const cellBg = isToday ? '#e3f2fd' : (isPast ? '#fafafa' : '#fff');
       const cellBorder = isToday ? '2px solid #003da5' : '1px solid #eef1f6';
       const dayNumColor = isToday ? '#003da5' : (isPast ? '#aaa' : '#1a1a2e');
-      const chips = c.events.slice(0, 3).map(evt => {
+      const chips = c.events.slice(0, chipLimit).map(evt => {
         const cat = classifyEvent(evt);
         const color = catColor(cat);
         const titleAttr = (evt.title || '') + (evt.who ? ` · 👤 ${evt.who}` : '');
-        return `
-          <div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}"
-               title="${escapeHtml(titleAttr)}"
-               style="font-size:0.68rem;padding:2px 5px;border-radius:3px;background:${color};color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">
-            ${escapeHtml((evt.title || '(untitled)').slice(0, 30))}
-          </div>
-        `;
+        const truncTo = compact ? 18 : 30;
+        return `<div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}" title="${escapeHtml(titleAttr)}" style="font-size:${chipFontSize};padding:1px 5px;border-radius:3px;background:${color};color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">${escapeHtml((evt.title || '(untitled)').slice(0, truncTo))}</div>`;
       }).join('');
-      const moreCount = c.events.length - 3;
-      const moreHtml = moreCount > 0 ? `<div style="font-size:0.65rem;color:#888;margin-top:1px;">+${moreCount} more</div>` : '';
-
+      const moreCount = c.events.length - chipLimit;
+      const moreHtml = moreCount > 0 ? `<div style="font-size:0.6rem;color:#888;margin-top:1px;">+${moreCount}</div>` : '';
       html += `
-        <div style="min-height:90px;background:${cellBg};border:${cellBorder};border-radius:6px;padding:5px 7px;display:flex;flex-direction:column;gap:2px;${isPast || isOtherMonth ? 'opacity:0.85;' : ''}">
-          <div style="font-size:0.78rem;font-weight:700;color:${dayNumColor};">${c.date.getDate()}</div>
+        <div style="min-height:${minCellHeight}px;background:${cellBg};border:${cellBorder};border-radius:5px;padding:4px 6px;display:flex;flex-direction:column;gap:2px;${isPast ? 'opacity:0.7;' : ''}">
+          <div style="font-size:${dayNumSize};font-weight:700;color:${dayNumColor};">${c.date.getDate()}</div>
           ${chips}
           ${moreHtml}
         </div>
@@ -4093,21 +4192,22 @@ const MEDTRONIC_PAR = [
 
     html += `</div></div>`;
 
-    // Legend
-    html += `
-      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;font-size:0.75rem;color:#666;">
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#003da5;"></span>Lab Session</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#6a1b9a;"></span>Training</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#2e7d32;"></span>R&D</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#c2185b;"></span>Specimen</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#00838f;"></span>Cleanup</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#90a4ae;"></span>Other</span>
-      </div>
-    `;
+    if (!compact) {
+      html += `
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;font-size:0.75rem;color:#666;">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#003da5;"></span>Lab Session</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#6a1b9a;"></span>Training</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#2e7d32;"></span>R&D</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#c2185b;"></span>Specimen</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#00838f;"></span>Cleanup</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#90a4ae;"></span>Other</span>
+        </div>
+      `;
+    }
+    return html;
+  }
 
-    dashEl.innerHTML = html;
-
-    // Wire chip clicks
+  function wireCalendarChipClicks() {
     dashEl.querySelectorAll('.cal-chip').forEach(chip => {
       chip.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -4115,6 +4215,34 @@ const MEDTRONIC_PAR = [
         if (evt) openEventDetailModal(evt);
       });
     });
+  }
+
+  function renderCalendarView() {
+    dashEl.innerHTML = buildCalendarGridHtml({ compact: false });
+    wireCalendarChipClicks();
+  }
+
+  // ── Home View — Calendar + Today's To-Do side by side ────────────
+  function renderHomeView() {
+    const todayObj = state.days[0];
+    const calendarHtml = buildCalendarGridHtml({ compact: true });
+
+    // Use the same renderDay() output for the right column. Drop the
+    // outer day-card wrapper in favor of a clean section header.
+    const todayCardHtml = todayObj ? renderDay(todayObj) : '<div class="empty-state-text">Nothing scheduled today.</div>';
+
+    dashEl.innerHTML = `
+      <div class="home-grid" style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:flex-start;">
+        <div>${calendarHtml}</div>
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">Today's to-do</div>
+          ${todayCardHtml}
+        </div>
+      </div>
+    `;
+    wireCalendarChipClicks();
+    // Wire all the same controls renderAll wires for day cards
+    wireDayViewControls();
   }
 
   // ── Fetch from Teamup ──────────────────────────────────────────────
@@ -4188,12 +4316,32 @@ const MEDTRONIC_PAR = [
     customTaskText.value = '';
     customTaskDate.value = customTaskTarget.date;
     customTaskTitle.textContent = 'Add Task';
-    // Master can assign tasks to teammates; everyone else can only add to themselves
+    // Master can assign to anyone; Bert can delegate to Latisha; others
+    // only add tasks to themselves (no dropdown shown).
     const assigneeRow = document.getElementById('custom-task-assignee-row');
     const assigneeSelect = document.getElementById('custom-task-assignee');
     if (assigneeRow && assigneeSelect) {
-      assigneeRow.style.display = (CURRENT_ROLE_KEY === 'master') ? 'block' : 'none';
-      assigneeSelect.value = 'master';
+      let options = [];
+      if (CURRENT_ROLE_KEY === 'master') {
+        options = [
+          { v: 'master',   label: 'Just me (Josh)' },
+          { v: 'bert',     label: 'Bert Clark' },
+          { v: 'anamaria', label: 'Ana Maria Rojas' },
+          { v: 'latisha',  label: 'Latisha' },
+        ];
+      } else if (CURRENT_ROLE_KEY === 'bert') {
+        options = [
+          { v: 'bert',     label: 'Just me (Bert)' },
+          { v: 'latisha',  label: 'Latisha (delegate)' },
+        ];
+      }
+      if (options.length) {
+        assigneeRow.style.display = 'block';
+        assigneeSelect.innerHTML = options.map(o => `<option value="${o.v}">${escapeHtml(o.label)}</option>`).join('');
+        assigneeSelect.value = options[0].v;
+      } else {
+        assigneeRow.style.display = 'none';
+      }
     }
     if (eventId) {
       const evt = state.events.find(e => String(e.id) === String(eventId));
