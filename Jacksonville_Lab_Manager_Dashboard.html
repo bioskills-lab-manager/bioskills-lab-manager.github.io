@@ -1484,6 +1484,14 @@ const MEDTRONIC_CATALOG = [
   { pn: "60011",        desc: "Propel® Mini Curved — one 16 mm implant + curved/malleable delivery system (Box of 1)", cat: "Tissue health", sub: "Propel® sinus implants" },
   { pn: "60044",        desc: "Propel® Mini Straight — one 16 mm implant + straight delivery system (Box of 1)", cat: "Tissue health", sub: "Propel® sinus implants" },
   { pn: "70011",        desc: "Propel® Original — one 23 mm ethmoid sinus implant (Box of 1)", cat: "Tissue health", sub: "Propel® sinus implants" },
+
+  // ── Visualization / scope accessories (placeholder PNs — confirm with rep) ──
+  { pn: "TBD-ENDOSCRUB", desc: "EndoScrub™ lens cleaning sheath (placeholder — confirm PN)", cat: "Visualization", sub: "EndoScrub™" },
+  { pn: "TBD-STORZ-0",   desc: "Storz 0° rigid sinus endoscope (placeholder — confirm PN)",  cat: "Visualization", sub: "Storz scopes" },
+
+  // ── NovaPak sinus dressings (placeholder PNs — confirm with rep) ──
+  { pn: "TBD-NOVAPAK-FIRM", desc: "NovaPak™ sinus dressing — Firm (placeholder — confirm PN)", cat: "Tissue health", sub: "NovaPak™ sinus dressings" },
+  { pn: "TBD-NOVAPAK-SOFT", desc: "NovaPak™ sinus dressing — Soft (placeholder — confirm PN)", cat: "Tissue health", sub: "NovaPak™ sinus dressings" },
 ];
 
 // Build a quick lookup so per-event-type defaults can reference parts by PN.
@@ -1561,26 +1569,79 @@ const RESTOCK_CATALOG = {
 // populates. Add new variants here over time (otology, multi-station
 // sinus, FESS, septoplasty, etc.).
 // ═══════════════════════════════════════════════════════════════════
+// ── VIP / multi-station kit ────────────────────────────────────────
+// Per-station kit Josh confirmed for cadaveric VIP labs. Each line is
+// 1× per station; the multi-station variants below scale qty by N.
+const VIP_LAB_PER_STATION = [
+  ["9733534XOM", 1],   // Patient tracker
+  ["9733533XOM", 1],   // Instrument tracker
+  ["1884380EM",  1],   // Navigated Quadcut (4.3 mm)
+  ["187BL4000L", 1],   // Navigated APEX blade (4.0 mm straight long)
+  ["187BL4040",  1],   // APEX 40° curved (4.0 mm)
+  ["187BL4060",  1],   // APEX 60° curved (4.0 mm)
+  ["187BL2975",  1],   // APEX 75° curved (2.9 mm — only size made)
+  ["187BL3590",  1],   // APEX 90° curved (3.5 mm)
+  ["1884015RTD", 1],   // 30K Choanal atresia diamond bur, 4.0 mm 15°
+  ["1884070RTD", 1],   // 30K RTD 70° tapered diamond bur
+  ["TBD-ENDOSCRUB",  1], // EndoScrub lens cleaner — confirm PN
+  ["TBD-STORZ-0",    1], // Storz 0° endoscope — confirm PN
+  ["1830717FRT70",   1], // NuVent 70° frontal balloon, 7 mm
+  ["1830616EST",     1], // NuVent ETB (Eustachian tube balloon)
+  ["1830717SPH",     1], // NuVent Sphenoid balloon, 7 mm
+  ["1830707MAX",     1], // NuVent Maxillary balloon, 7 mm
+  ["TBD-NOVAPAK-FIRM", 1], // NovaPak Firm — confirm PN
+  ["TBD-NOVAPAK-SOFT", 1], // NovaPak Soft — confirm PN
+  ["50011", 1],        // Propel Contour
+  ["60011", 1],        // Propel Mini Curved
+  ["60044", 1],        // Propel Mini Straight
+  ["70011", 1],        // Propel Original 23 mm
+];
+function vipKitForStations(n) {
+  return buildDefaultList(VIP_LAB_PER_STATION.map(([pn, q]) => [pn, q * n]));
+}
+
 const LAB_VARIANTS = {
   default: {
     label: "General lab (default)",
     items: RESTOCK_CATALOG.lab,
   },
+  vip1Station: {
+    label: "1-Station VIP Lab",
+    items: vipKitForStations(1),
+  },
+  vip2Station: {
+    label: "2-Station Lab",
+    items: vipKitForStations(2),
+  },
+  vip3Station: {
+    label: "3-Station Lab",
+    items: vipKitForStations(3),
+  },
+  vip4Station: {
+    label: "4-Station Lab",
+    items: vipKitForStations(4),
+  },
+  vip5Station: {
+    label: "5-Station Lab",
+    items: vipKitForStations(5),
+  },
+  // Legacy 1-Station Sinus Lab kept for backwards compatibility — older
+  // event variant prefs stored under this key still resolve correctly.
   sinusLab1Station: {
-    label: "1-Station Sinus Lab",
+    label: "1-Station Sinus Lab (legacy)",
     items: buildDefaultList([
-      ["1884380EM", 1],   // 1 navigated Quadcut (4.3 mm) — adjust size if needed
-      ["187BL4000L", 1],  // 1 Apex straight blade, 13 cm
-      ["1884006EM", 1],   // 1 navigated RAD 40 curved
-      ["50011", 1],       // Propel Contour (Box of 1)
-      ["60011", 1],       // Propel Mini Curved (Box of 1)
-      ["60044", 1],       // Propel Mini Straight (Box of 1)
-      ["18INFKIT", 1],    // NuVent inflator
-      ["1830717FRT70", 1],// 70° NuVent frontal balloon, 7 mm
-      ["1830707MAX", 1],  // Maxillary balloon, 7 mm
-      ["1830717SPH", 1],  // Sphenoid balloon, 7 mm
-      ["9733534XOM", 1],  // Patient tracker
-      ["9733533XOM", 1],  // Instrument tracker
+      ["1884380EM", 1],
+      ["187BL4000L", 1],
+      ["1884006EM", 1],
+      ["50011", 1],
+      ["60011", 1],
+      ["60044", 1],
+      ["18INFKIT", 1],
+      ["1830717FRT70", 1],
+      ["1830707MAX", 1],
+      ["1830717SPH", 1],
+      ["9733534XOM", 1],
+      ["9733533XOM", 1],
     ]),
   },
 };
