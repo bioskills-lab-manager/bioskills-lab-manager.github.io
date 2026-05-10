@@ -4310,7 +4310,7 @@ const MEDTRONIC_PAR = [
     const subtitleMap = {
       master:   'Jacksonville Bioskills Lab — Manager Dashboard',
       anamaria: 'Specimens & Meeting Planning',
-      bert:     'Lab Manager',
+      bert:     '',
       latisha:  'Your upcoming Med Ed events',
     };
     const firstName = firstNameMap[CURRENT_ROLE_KEY] || CURRENT_ROLE.name;
@@ -4318,7 +4318,12 @@ const MEDTRONIC_PAR = [
       titleEl.textContent = `Good ${timeOfDay}, ${firstName}`;
     }
     if (locEl) {
-      locEl.textContent = subtitleMap[CURRENT_ROLE_KEY] || 'Jacksonville Bioskills Lab';
+      const subtitle = subtitleMap[CURRENT_ROLE_KEY];
+      if (subtitle === '') {
+        locEl.style.display = 'none';
+      } else {
+        locEl.textContent = subtitle || 'Jacksonville Bioskills Lab';
+      }
     }
   })();
 
