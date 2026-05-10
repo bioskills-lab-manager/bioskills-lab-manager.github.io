@@ -5301,25 +5301,34 @@ const MEDTRONIC_PAR = [
       const pdfDoc = await PDFDocument.load(blankBytes);
       const form   = pdfDoc.getForm();
 
-      // Wipe every text field on the template so leftover prefill from prior
-      // fills (Providence lab, Amanda Smith, old Cephalus row, etc.) doesn't
-      // leak through any field we don't explicitly write to.
-      try {
-        form.getFields().forEach(f => {
-          try {
-            if (f.constructor && f.constructor.name === 'PDFTextField') {
-              f.setText('');
-            }
-          } catch (_) {}
-        });
-      } catch (_) {}
-
       const set = (name, value) => {
         try {
           const f = form.getTextField(name);
           if (f && value != null) f.setText(String(value));
         } catch (e) { /* field doesn't exist or wrong type — skip */ }
       };
+
+      // Wipe every text field on the template so leftover prefill from prior
+      // fills (Providence lab, Amanda Smith, old Cephalus row, etc.) doesn't
+      // leak through any field we don't explicitly write to. Duck-typed —
+      // pdf-lib production builds mangle constructor.name.
+      try {
+        form.getFields().forEach(f => {
+          if (f && typeof f.setText === 'function') {
+            try { f.setText(''); } catch (_) {}
+          }
+        });
+      } catch (_) {}
+
+      // Belt-and-suspenders: explicitly blank every specimen-row field name
+      // we know about (the template ships with leftover Cephalus rows).
+      [
+        'Text67','Text68','Text69','Text70','Text71','Text72',
+        'Text681','Text682','Text691','Text692','Text693',
+        'Text721','Text722','Text723','Text724','Text725',
+        'Text726','Text727','Text728','Text729',
+        'Text78','Text79','Text86','Date81_af_date'
+      ].forEach(n => set(n, ''));
 
       // Constants
       set('Text11', 'Medtronic');
