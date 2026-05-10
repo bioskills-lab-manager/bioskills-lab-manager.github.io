@@ -2450,7 +2450,10 @@ const MEDTRONIC_PAR = [
   }
 
   function dayIsActive(day) {
-    return day.eventGroups.length > 0 || day.events.length > 0 || day.dailyOps.length > 0;
+    return day.eventGroups.length > 0
+        || day.events.length > 0
+        || day.dailyOps.length > 0
+        || (day.customTasks && day.customTasks.length > 0);
   }
   function dayHasIncomplete(day) {
     const all = [
@@ -2519,8 +2522,11 @@ const MEDTRONIC_PAR = [
     const headerClass = day.isToday ? 'is-today-header' : '';
     const cardClasses = ['day-card'];
     if (day.isToday) cardClasses.push('is-today');
-    if (state.allCollapsed && !day.isToday) cardClasses.push('collapsed');
-    if (!dayIsActive(day)) cardClasses.push('is-empty');
+    const isEmpty = !dayIsActive(day);
+    if (isEmpty) cardClasses.push('is-empty');
+    // Collapse by default if: user toggled "Collapse all", OR the day is
+    // empty (no tasks, no events). Today never auto-collapses.
+    if (!day.isToday && (state.allCollapsed || isEmpty)) cardClasses.push('collapsed');
 
     // count tasks on this day
     const allTasks = [...day.eventGroups.flatMap(g => g.tasks), ...dailyOpsLeaves(day)];
