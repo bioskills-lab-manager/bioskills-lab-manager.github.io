@@ -1994,6 +1994,45 @@ const MEDTRONIC_PAR = [
   </div>
 </div>
 
+<!-- ─── Event Detail Modal — full picture for one event ─────────────── -->
+<div class="modal-backdrop" id="event-detail-modal">
+  <div class="modal" style="max-width:880px;">
+    <div class="modal-header">
+      <h3 id="event-detail-title">Event details</h3>
+      <button class="modal-close" id="event-detail-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="event-detail-meta" style="background:#f4f6f9;border-radius:10px;padding:14px 18px;margin-bottom:14px;font-size:0.9rem;color:#1a1a2e;line-height:1.7;"></div>
+
+      <!-- Quick actions row -->
+      <div id="event-detail-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+      <!-- Tasks section -->
+      <h4 style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">Prep Tasks</h4>
+      <div id="event-detail-tasks" style="margin-bottom:18px;"></div>
+
+      <!-- Custom tasks for this event -->
+      <h4 style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">Custom Tasks</h4>
+      <div id="event-detail-customs" style="margin-bottom:18px;"></div>
+
+      <!-- Notes / chat thread -->
+      <h4 style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+        💬 Team Notes
+        <span style="font-size:0.7rem;font-weight:500;color:#aaa;text-transform:none;letter-spacing:0;">(shared via Teamup)</span>
+      </h4>
+      <div id="event-notes-thread" style="background:#f8fafd;border-radius:10px;padding:12px 14px;margin-bottom:10px;max-height:280px;overflow-y:auto;font-size:0.88rem;line-height:1.55;"></div>
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="event-notes-input" placeholder="Add a note for the team…" style="flex:1;border:1.5px solid #d0d8e8;border-radius:8px;padding:10px 12px;font-size:0.92rem;color:#1a1a2e;font-family:inherit;outline:none;" />
+        <button class="btn primary" id="event-notes-post" type="button" style="white-space:nowrap;">Post</button>
+      </div>
+      <div id="event-notes-status" style="font-size:0.78rem;color:#888;margin-top:6px;min-height:1.2em;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn primary" id="event-detail-close-btn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── Add Custom Task Modal ───────────────────────────────────────── -->
 <div class="modal-backdrop" id="custom-task-modal">
   <div class="modal" style="max-width:520px;">
@@ -2007,6 +2046,15 @@ const MEDTRONIC_PAR = [
       <input type="text" id="custom-task-text" placeholder="e.g. Call vendor for confirmation" />
       <label for="custom-task-date">Date</label>
       <input type="date" id="custom-task-date" />
+      <div id="custom-task-assignee-row" style="display:none;">
+        <label for="custom-task-assignee">Assign to</label>
+        <select id="custom-task-assignee" style="width:100%;border:1.5px solid #d0d8e8;border-radius:8px;padding:10px 12px;font-size:0.92rem;background:#fff;font-family:inherit;outline:none;color:#1a1a2e;">
+          <option value="master">Just me (Josh)</option>
+          <option value="bert">Bert Clark</option>
+          <option value="anamaria">Ana Maria Rojas</option>
+          <option value="latisha">Latisha</option>
+        </select>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" id="custom-task-cancel" type="button">Cancel</button>
@@ -2541,7 +2589,7 @@ const MEDTRONIC_PAR = [
       // Pick verb based on whether the event is upcoming or past
       const today = new Date(); today.setHours(0,0,0,0);
       const evtDate = parseYMD(group.eventDate);
-      const buttonLabel = evtDate < today ? 'Generate restock email' : 'Generate order email';
+      const buttonLabel = evtDate < today ? 'Generate Customer Service email' : 'Generate Customer Service email';
       const restockBtnHtml = showRestockBtn ? `
         <button class="btn-restock" data-event-id="${escapeHtml(String(group.eventId))}" data-category="${escapeHtml(group.category)}" type="button">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 14h8"/></svg>
@@ -2568,12 +2616,19 @@ const MEDTRONIC_PAR = [
       // Add custom task button (only for non-master, non-Latisha-listing-mode roles)
       const addCustomBtn = `<button type="button" class="btn-add-custom" data-date="${escapeHtml(day.dateKey)}" data-event-id="${escapeHtml(String(group.eventId))}" style="margin-top:8px;background:#fff;border:1.5px dashed #6a1b9a;color:#6a1b9a;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add task to this event</button>`;
 
+      const noteCount = parseNotesThread(group.event.notes || '').length;
+      const detailBtn = `<button type="button" class="btn-event-detail"
+              data-event-id="${escapeHtml(String(group.eventId))}"
+              style="margin-left:auto;background:#fff;border:1.5px solid #003da5;color:#003da5;font-size:0.7rem;font-weight:700;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+              👁 Open ${noteCount ? `· 💬 ${noteCount}` : ''}
+            </button>`;
       return `
         <div class="event-group ${group.cssClass}">
-          <div class="event-title">
+          <div class="event-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
             <span class="event-tag">${escapeHtml(group.label)}</span>
-            ${escapeHtml(group.event.title || '(untitled)')}
+            <span style="flex:1;min-width:0;">${escapeHtml(group.event.title || '(untitled)')}</span>
             ${subcalTag}
+            ${detailBtn}
           </div>
           <div class="event-meta">Event date: ${escapeHtml(eventDateLabel)}</div>
           ${ccLine}
@@ -2863,6 +2918,17 @@ const MEDTRONIC_PAR = [
         const evt = state.events.find(ev => String(ev.id) === eventId);
         if (!evt) return;
         openRestockModal(evt, category);
+      });
+    });
+
+    // Wire up Open Event Detail buttons
+    dashEl.querySelectorAll('.btn-event-detail').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const eventId = btn.getAttribute('data-event-id');
+        const evt = state.events.find(ev => String(ev.id) === String(eventId));
+        if (evt) openEventDetailModal(evt);
       });
     });
 
@@ -3861,6 +3927,7 @@ const MEDTRONIC_PAR = [
               💰 <strong>Charge to:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:${accentHex};font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})
             </div>` : ''}
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn-event-detail" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px solid ${accentHex};color:${accentHex};font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">👁 Open event</button>
               <button type="button" class="btn-add-custom" data-date="${escapeHtml(startKey)}" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px dashed ${accentHex};color:${accentHex};font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add personal note</button>
             </div>
           </div>
@@ -3898,11 +3965,18 @@ const MEDTRONIC_PAR = [
       showCostCenter: true,   // contractor — needs cost center to bill
       collapsibleAfter: 3,
     });
-    // Wire add-custom buttons (rendered inside the hero cards)
+    // Wire add-custom + open-event-detail buttons (rendered inside hero cards)
     dashEl.querySelectorAll('.btn-add-custom').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation(); e.preventDefault();
         openCustomTaskModal(btn.getAttribute('data-date'), btn.getAttribute('data-event-id') || null);
+      });
+    });
+    dashEl.querySelectorAll('.btn-event-detail').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        const evt = state.events.find(ev => String(ev.id) === String(btn.getAttribute('data-event-id')));
+        if (evt) openEventDetailModal(evt);
       });
     });
   }
@@ -3978,6 +4052,13 @@ const MEDTRONIC_PAR = [
     customTaskText.value = '';
     customTaskDate.value = customTaskTarget.date;
     customTaskTitle.textContent = 'Add Task';
+    // Master can assign tasks to teammates; everyone else can only add to themselves
+    const assigneeRow = document.getElementById('custom-task-assignee-row');
+    const assigneeSelect = document.getElementById('custom-task-assignee');
+    if (assigneeRow && assigneeSelect) {
+      assigneeRow.style.display = (CURRENT_ROLE_KEY === 'master') ? 'block' : 'none';
+      assigneeSelect.value = 'master';
+    }
     if (eventId) {
       const evt = state.events.find(e => String(e.id) === String(eventId));
       customTaskContext.innerHTML = evt
@@ -4000,10 +4081,16 @@ const MEDTRONIC_PAR = [
     const text = (customTaskText.value || '').trim();
     if (!text) { customTaskText.focus(); return; }
     const date = customTaskDate.value || customTaskTarget.date;
+    // On master view, use the assignee dropdown; on other roles, owner is current role
+    let ownerRole = CURRENT_ROLE_KEY;
+    if (CURRENT_ROLE_KEY === 'master') {
+      const sel = document.getElementById('custom-task-assignee');
+      if (sel && ROLES[sel.value]) ownerRole = sel.value;
+    }
     const list = loadCustomTasks();
     list.push({
       id:            newCustomTaskId(),
-      ownerRole:     CURRENT_ROLE_KEY,
+      ownerRole:     ownerRole,
       scheduledDate: date,
       text:          text,
       eventId:       customTaskTarget.eventId,
@@ -4018,6 +4105,312 @@ const MEDTRONIC_PAR = [
   // Allow Enter in the text field to submit
   customTaskText.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') customTaskSave.click();
+  });
+
+  // ── Event Detail Modal ───────────────────────────────────────────
+  // Shows full picture for one event: metadata, tasks by owner, custom
+  // tasks, and a shared notes thread (synced via Teamup's notes field).
+  const eventDetailModal      = document.getElementById('event-detail-modal');
+  const eventDetailTitle      = document.getElementById('event-detail-title');
+  const eventDetailMeta       = document.getElementById('event-detail-meta');
+  const eventDetailActions    = document.getElementById('event-detail-actions');
+  const eventDetailTasks      = document.getElementById('event-detail-tasks');
+  const eventDetailCustoms    = document.getElementById('event-detail-customs');
+  const eventNotesThread      = document.getElementById('event-notes-thread');
+  const eventNotesInput       = document.getElementById('event-notes-input');
+  const eventNotesPost        = document.getElementById('event-notes-post');
+  const eventNotesStatus      = document.getElementById('event-notes-status');
+  const eventDetailClose      = document.getElementById('event-detail-close');
+  const eventDetailCloseBtn   = document.getElementById('event-detail-close-btn');
+
+  let eventDetailContext = { event: null, category: null };
+
+  function noteAuthorForRole() {
+    return ({
+      master:   'Josh',
+      anamaria: 'Ana Maria',
+      bert:     'Bert',
+      latisha:  'Latisha',
+    })[CURRENT_ROLE_KEY] || CURRENT_ROLE_KEY;
+  }
+
+  function fmtNoteTimestamp() {
+    const d = new Date();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    let h = d.getHours();
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const am = h < 12 ? 'AM' : 'PM';
+    h = h % 12 || 12;
+    return `${m}/${day} ${h}:${min} ${am}`;
+  }
+
+  function parseNotesThread(notesText) {
+    // Notes can be HTML or plain text from Teamup. Strip basic HTML tags
+    // and parse `[timestamp Name] message` lines into entries.
+    if (!notesText) return [];
+    const plain = String(notesText).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const lines = plain.split(/\r?\n/);
+    const entries = [];
+    let buffer = null;
+    lines.forEach(line => {
+      const m = line.match(/^\s*\[([^\]]+)\]\s*(.*)$/);
+      if (m) {
+        if (buffer) entries.push(buffer);
+        // Header is "<timestamp> <Name>" — split at last space chunk before name word
+        // e.g. "5/9 2:30 PM Josh"
+        const header = m[1].trim();
+        const tokens = header.split(/\s+/);
+        const author = tokens[tokens.length - 1];
+        const ts = tokens.slice(0, -1).join(' ');
+        buffer = { author, ts, text: m[2] };
+      } else if (buffer) {
+        // Continuation line
+        if (line.trim()) buffer.text += '\n' + line;
+      }
+    });
+    if (buffer) entries.push(buffer);
+    return entries;
+  }
+
+  function renderEventNotes(notesText) {
+    const entries = parseNotesThread(notesText);
+    if (!entries.length) {
+      eventNotesThread.innerHTML = `<div style="color:#aaa;font-style:italic;padding:6px 0;">No notes yet — start the conversation below.</div>`;
+      return;
+    }
+    const colorByAuthor = {
+      Josh: '#003da5',
+      Bert: '#00838f',
+      'Ana Maria': '#c2185b',
+      Ana: '#c2185b',
+      Latisha: '#6a1b9a',
+    };
+    eventNotesThread.innerHTML = entries.map(e => {
+      const color = colorByAuthor[e.author] || '#666';
+      return `
+        <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #eef1f6;">
+          <div style="font-size:0.78rem;font-weight:700;color:${color};margin-bottom:2px;">${escapeHtml(e.author)} <span style="color:#aaa;font-weight:500;font-size:0.72rem;">· ${escapeHtml(e.ts)}</span></div>
+          <div style="white-space:pre-wrap;">${escapeHtml(e.text)}</div>
+        </div>
+      `;
+    }).join('');
+    // Auto-scroll to bottom
+    eventNotesThread.scrollTop = eventNotesThread.scrollHeight;
+  }
+
+  async function postEventNote(message) {
+    const evt = eventDetailContext.event;
+    if (!evt) return;
+    const stamp = `[${fmtNoteTimestamp()} ${noteAuthorForRole()}] ${message}`;
+    // Append to existing notes (preserve any previous content)
+    const existing = (evt.notes || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+    const newNotes = existing ? (existing.trimEnd() + '\n' + stamp) : stamp;
+
+    eventNotesStatus.textContent = 'Posting…';
+    eventNotesPost.disabled = true;
+
+    try {
+      // Teamup PUT requires the full event payload. We send the minimum the
+      // API accepts: id, version, start_dt, end_dt, subcalendar_id, title,
+      // and our updated notes.
+      const payload = {
+        id:             evt.id,
+        version:        evt.version,
+        start_dt:       evt.start_dt,
+        end_dt:         evt.end_dt,
+        subcalendar_id: evt.subcalendar_id,
+        title:          evt.title,
+        who:            evt.who || '',
+        notes:          newNotes,
+      };
+      const res = await fetch(
+        `https://api.teamup.com/${ADMIN_CONFIG.teamupCalendarKey}/events/${evt.id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Teamup-Token': ADMIN_CONFIG.teamupApiToken },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 120)}`);
+      }
+      const data = await res.json();
+      // Update local event state with new version + notes
+      evt.notes = newNotes;
+      if (data && data.event && data.event.version) evt.version = data.event.version;
+      // Also update in state.events
+      const stateEvt = state.events.find(e => String(e.id) === String(evt.id));
+      if (stateEvt) {
+        stateEvt.notes = newNotes;
+        if (data && data.event && data.event.version) stateEvt.version = data.event.version;
+      }
+      eventNotesInput.value = '';
+      eventNotesStatus.textContent = '✓ Posted';
+      setTimeout(() => { eventNotesStatus.textContent = ''; }, 1500);
+      renderEventNotes(newNotes);
+      // Refresh dashboard to update note-count badges
+      renderAll();
+    } catch (err) {
+      console.error('Note post failed:', err);
+      eventNotesStatus.textContent = '⚠ Could not post: ' + err.message;
+    } finally {
+      eventNotesPost.disabled = false;
+    }
+  }
+
+  function openEventDetailModal(evt) {
+    eventDetailContext.event = evt;
+    const cat = classifyEvent(evt);
+    eventDetailContext.category = cat;
+    const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
+
+    const startKey = (evt.start_dt || '').slice(0, 10);
+    const startD = parseYMD(startKey);
+    const dateStr = `${DOW_FULL[startD.getDay()]}, ${MONTHS_SHORT[startD.getMonth()]} ${startD.getDate()}, ${startD.getFullYear()}`;
+    const subcalName = state.subcalMap[evt.subcalendar_id] || '';
+    const surgeon = detectSurgeonFromTitle(evt.title);
+    const dsmName = detectDsmFromTitle(evt.title);
+    const dsm = dsmName ? dsmByName(dsmName) : dsmByName('Med Ed');
+
+    eventDetailTitle.textContent = evt.title || '(untitled)';
+
+    eventDetailMeta.innerHTML = `
+      <div><strong>Type:</strong> ${escapeHtml(tmpl.label)}</div>
+      <div><strong>Date:</strong> ${escapeHtml(dateStr)}</div>
+      ${subcalName ? `<div><strong>Calendar:</strong> ${escapeHtml(subcalName)}</div>` : ''}
+      ${evt.who ? `<div><strong>Who:</strong> ${escapeHtml(evt.who)}</div>` : ''}
+      ${surgeon ? `<div><strong>Surgeon:</strong> ${escapeHtml(surgeon)}</div>` : ''}
+      <div><strong>Cost center:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:#003da5;font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})</div>
+    `;
+
+    // Quick actions
+    const actions = [];
+    if (CURRENT_ROLE.showRestockEmail) {
+      actions.push(`<button class="btn primary" type="button" id="ed-action-restock">📧 Generate Customer Service email</button>`);
+    }
+    if (CURRENT_ROLE.showCadaverLog && (cat === 'specimenDelivery' || cat === 'specimenPickup')) {
+      actions.push(`<button class="btn" type="button" id="ed-action-cadaver">📋 Open cadaver log</button>`);
+    }
+    actions.push(`<button class="btn" type="button" id="ed-action-add-task">+ Add custom task to this event</button>`);
+    eventDetailActions.innerHTML = actions.join(' ');
+
+    // Tasks grouped by owner
+    const buckets = { ana: [], bert: [], universal: [] };
+    tmpl.tasks.forEach(task => {
+      const taskDate = addDays(startD, -task.offset);
+      const checkKey = 'evt:' + evt.id + ':' + task.id;
+      const entry = {
+        text: task.text,
+        relativeLabel: task.offset > 0 ? `T-${task.offset}` : task.offset === 0 ? 'Day of' : `T+${Math.abs(task.offset)}`,
+        scheduledKey: ymd(taskDate),
+        checkKey,
+        roles: task.roles || null,
+      };
+      const rolesArr = task.roles || [];
+      if (!rolesArr.length) buckets.universal.push(entry);
+      else {
+        if (rolesArr.includes('anamaria')) buckets.ana.push(entry);
+        if (rolesArr.includes('bert')) buckets.bert.push(entry);
+      }
+    });
+
+    function renderBucket(name, color, list) {
+      if (!list.length) return '';
+      const tasksHtml = list.map(t => {
+        const checked = isChecked(t.checkKey);
+        return `
+          <label class="task ${checked ? 'done' : ''}" data-key="${escapeHtml(t.checkKey)}" style="padding:5px 4px;">
+            <input type="checkbox" ${checked ? 'checked' : ''} />
+            <span class="task-text" style="font-size:0.88rem;">${escapeHtml(t.text)} <span class="relative-tag">${t.relativeLabel}</span></span>
+          </label>
+        `;
+      }).join('');
+      return `
+        <div style="margin-bottom:10px;">
+          <div style="font-size:0.78rem;font-weight:700;color:${color};margin-bottom:4px;">${escapeHtml(name)} (${list.length})</div>
+          <div class="task-list">${tasksHtml}</div>
+        </div>
+      `;
+    }
+    eventDetailTasks.innerHTML = (
+      renderBucket('Ana Maria',  '#c2185b', buckets.ana) +
+      renderBucket('Bert',       '#00838f', buckets.bert) +
+      renderBucket('Universal',  '#666',    buckets.universal)
+    ) || '<div style="color:#aaa;font-style:italic;">No prep tasks for this event type.</div>';
+
+    // Custom tasks for this event
+    const customs = loadCustomTasks().filter(ct => String(ct.eventId) === String(evt.id));
+    if (customs.length) {
+      eventDetailCustoms.innerHTML = customs.map(ct => {
+        const checked = isChecked('custom:' + ct.id);
+        const ownerCfg = ROLES[ct.ownerRole];
+        const badge = ownerCfg
+          ? `<span style="margin-left:6px;font-size:0.65rem;font-weight:700;letter-spacing:0.5px;padding:1px 6px;border-radius:3px;background:${ownerCfg.color};color:#fff;text-transform:uppercase;">${escapeHtml(ownerCfg.name.split(' ')[0])}</span>`
+          : '';
+        return `
+          <label class="task ${checked ? 'done' : ''}" data-key="custom:${escapeHtml(ct.id)}" style="background:#faf2fc;border-radius:6px;padding:5px 8px;margin-bottom:4px;">
+            <input type="checkbox" ${checked ? 'checked' : ''} />
+            <span class="task-text" style="font-size:0.88rem;">${escapeHtml(ct.text)}${badge}</span>
+          </label>
+        `;
+      }).join('');
+    } else {
+      eventDetailCustoms.innerHTML = '<div style="color:#aaa;font-style:italic;">No custom tasks yet for this event.</div>';
+    }
+
+    // Notes
+    renderEventNotes(evt.notes || '');
+    eventNotesInput.value = '';
+    eventNotesStatus.textContent = '';
+
+    // Wire action buttons
+    const restockBtn = document.getElementById('ed-action-restock');
+    if (restockBtn) restockBtn.addEventListener('click', () => {
+      eventDetailModal.classList.remove('open');
+      openRestockModal(evt, cat);
+    });
+    const cadaverBtn = document.getElementById('ed-action-cadaver');
+    if (cadaverBtn) cadaverBtn.addEventListener('click', () => {
+      eventDetailModal.classList.remove('open');
+      openCadaverModal(evt, cat);
+    });
+    const addTaskBtn = document.getElementById('ed-action-add-task');
+    if (addTaskBtn) addTaskBtn.addEventListener('click', () => {
+      eventDetailModal.classList.remove('open');
+      openCustomTaskModal(startKey, evt.id);
+    });
+
+    // Wire task checkboxes inside the modal
+    eventDetailModal.querySelectorAll('label.task').forEach(lbl => {
+      lbl.addEventListener('change', () => {
+        const key = lbl.getAttribute('data-key');
+        const cb = lbl.querySelector('input[type="checkbox"]');
+        setChecked(key, cb.checked);
+        lbl.classList.toggle('done', cb.checked);
+      });
+    });
+
+    eventDetailModal.classList.add('open');
+    setTimeout(() => eventNotesInput.focus(), 50);
+  }
+
+  if (eventDetailClose) eventDetailClose.addEventListener('click', () => eventDetailModal.classList.remove('open'));
+  if (eventDetailCloseBtn) eventDetailCloseBtn.addEventListener('click', () => {
+    eventDetailModal.classList.remove('open');
+    renderAll();
+  });
+  if (eventDetailModal) eventDetailModal.addEventListener('click', (e) => {
+    if (e.target === eventDetailModal) { eventDetailModal.classList.remove('open'); renderAll(); }
+  });
+  if (eventNotesPost) eventNotesPost.addEventListener('click', () => {
+    const text = (eventNotesInput.value || '').trim();
+    if (!text) { eventNotesInput.focus(); return; }
+    postEventNote(text);
+  });
+  if (eventNotesInput) eventNotesInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); eventNotesPost.click(); }
   });
 
   // ── Par Check Modal (Lab Supply + Medtronic) ─────────────────────
