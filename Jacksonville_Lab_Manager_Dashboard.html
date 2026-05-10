@@ -947,15 +947,14 @@ function getCurrentRoleKey() {
 const CURRENT_ROLE_KEY = getCurrentRoleKey();
 const CURRENT_ROLE = ROLES[CURRENT_ROLE_KEY];
 
-// Read view from URL (?view=...) — default to home.
-// home     = calendar + today's to-do side-by-side (DEFAULT)
-// day      = full day-by-day list
+// Read view from URL (?view=...) — default to day (Daily To-Do).
+// day      = chronological to-do list (DEFAULT)
 // calendar = full-width calendar grid
 // team     = master-only event-pivot
 function getCurrentView() {
-  const p = new URLSearchParams(window.location.search).get('view') || 'home';
-  if (p === 'team' && CURRENT_ROLE_KEY !== 'master') return 'home';
-  return ['home', 'day', 'team', 'calendar'].includes(p) ? p : 'home';
+  const p = new URLSearchParams(window.location.search).get('view') || 'day';
+  if (p === 'team' && CURRENT_ROLE_KEY !== 'master') return 'day';
+  return ['day', 'team', 'calendar'].includes(p) ? p : 'day';
 }
 const CURRENT_VIEW = getCurrentView();
 
@@ -1824,8 +1823,7 @@ const MEDTRONIC_PAR = [
   <div class="actions">
     <!-- View switcher -->
     <div class="view-switcher" id="view-switcher" style="display:none;background:#fff;border:1.5px solid #d0d8e8;border-radius:8px;padding:3px;display:none;gap:0;">
-      <a class="view-tab" id="view-tab-home"     href="#" data-view="home"     style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">🏠 Home</a>
-      <a class="view-tab" id="view-tab-day"      href="#" data-view="day"      style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📋 Day-by-day</a>
+      <a class="view-tab" id="view-tab-day"      href="#" data-view="day"      style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📋 Daily To-Do</a>
       <a class="view-tab" id="view-tab-calendar" href="#" data-view="calendar" style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📅 Calendar</a>
       <a class="view-tab" id="view-tab-team"     href="#" data-view="team"     style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">👥 Team Status</a>
     </div>
@@ -2807,10 +2805,6 @@ const MEDTRONIC_PAR = [
     }
     if (CURRENT_VIEW === 'calendar') {
       renderCalendarView();
-      return;
-    }
-    if (CURRENT_VIEW === 'home') {
-      renderHomeView();
       return;
     }
     if (CURRENT_ROLE_KEY === 'latisha') {
