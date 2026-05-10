@@ -5315,10 +5315,13 @@ const MEDTRONIC_PAR = [
       // fills (Providence lab, Amanda Smith, old Cephalus row, etc.) doesn't
       // leak through any field we don't explicitly write to. Duck-typed —
       // pdf-lib production builds mangle constructor.name.
+      // Also pin font size to 10pt so multi-line description fields don't
+      // render at the field's huge default size when given short text.
       try {
         form.getFields().forEach(f => {
           if (f && typeof f.setText === 'function') {
             try { f.setText(''); } catch (_) {}
+            try { f.setFontSize(10); } catch (_) {}
           }
         });
       } catch (_) {}
