@@ -2553,7 +2553,12 @@ const MEDTRONIC_PAR = [
       // Cost center hint per event (auto-detected from title; falls back to Med Ed)
       const dsmName = (typeof detectDsmFromTitle === 'function') ? detectDsmFromTitle(group.event.title) : '';
       const dsm = dsmName ? dsmByName(dsmName) : dsmByName('Med Ed');
-      const ccLine = `<div style="margin-top:4px;font-size:0.78rem;color:#666;">💰 Charge to: <strong style="font-family:ui-monospace,Menlo,monospace;color:#003da5;">${escapeHtml(dsm.cc)}</strong> (${escapeHtml(dsm.name)})</div>`;
+      // Cost center line — shown only for master (planning context) and
+      // Latisha (contractor billing). Bert and Ana don't bill, so they
+      // don't need to see it on every event.
+      const ccLine = (CURRENT_ROLE_KEY === 'master' || CURRENT_ROLE_KEY === 'latisha')
+        ? `<div style="margin-top:4px;font-size:0.78rem;color:#666;">💰 Charge to: <strong style="font-family:ui-monospace,Menlo,monospace;color:#003da5;">${escapeHtml(dsm.cc)}</strong> (${escapeHtml(dsm.name)})</div>`
+        : '';
 
       // Add custom task button (only for non-master, non-Latisha-listing-mode roles)
       const addCustomBtn = `<button type="button" class="btn-add-custom" data-date="${escapeHtml(day.dateKey)}" data-event-id="${escapeHtml(String(group.eventId))}" style="margin-top:8px;background:#fff;border:1.5px dashed #6a1b9a;color:#6a1b9a;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add task to this event</button>`;
@@ -3788,9 +3793,9 @@ const MEDTRONIC_PAR = [
               ${subcalName ? `<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:#eef2fb;color:#003da5;text-transform:uppercase;">${escapeHtml(subcalName)}</span>` : ''}
               ${evt.who ? `<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:${accentLight};color:${accentHex};text-transform:uppercase;">👤 ${escapeHtml(evt.who)}</span>` : ''}
             </div>
-            <div style="font-size:0.88rem;color:#666;margin-top:6px;">
+            ${options.showCostCenter ? `<div style="font-size:0.88rem;color:#666;margin-top:6px;">
               💰 <strong>Charge to:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:${accentHex};font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})
-            </div>
+            </div>` : ''}
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
               <button type="button" class="btn-add-custom" data-date="${escapeHtml(startKey)}" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px dashed ${accentHex};color:${accentHex};font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add personal note</button>
             </div>
@@ -3808,6 +3813,7 @@ const MEDTRONIC_PAR = [
       accentHex: '#6a1b9a',
       accentHexEnd: '#8e24aa',
       accentLight: '#f3e5f5',
+      showCostCenter: true,   // contractor — needs cost center to bill
     });
     // Wire add-custom buttons (rendered inside the hero cards)
     dashEl.querySelectorAll('.btn-add-custom').forEach(btn => {
