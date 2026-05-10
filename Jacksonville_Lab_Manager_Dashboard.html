@@ -2346,33 +2346,10 @@ const MEDTRONIC_PAR = [
       });
     });
 
-    // 2) Daily ops — skip weekends UNLESS there was an event scheduled that day
-    for (let i = 1; i <= ROLLOVER_LOOKBACK_DAYS; i++) {
-      const d = addDays(today, -i);
-      const dKey = ymd(d);
-      if (isWeekend(d)) {
-        const hadEvent = state.events.some(evt => (evt.start_dt || '').slice(0, 10) === dKey);
-        if (!hadEvent) continue;
-      }
-      DAILY_OPS.forEach(op => {
-        const items = (op.subTasks && op.subTasks.length)
-          ? op.subTasks.map(s => ({ id: s.id, text: s.text, parent: op }))
-          : [{ id: op.id, text: op.text, parent: null, action: op.action }];
-        items.forEach(item => {
-          const checkKey = 'daily:' + dKey + ':' + item.id;
-          if (isChecked(checkKey)) return;
-          overdue.push({
-            source: 'daily',
-            text: item.text,
-            parentText: item.parent ? item.parent.text : null,
-            action: item.action || (item.parent && item.parent.action) || null,
-            checkKey,
-            scheduledKey: dKey,
-            scheduledD:   d,
-          });
-        });
-      });
-    }
+    // 2) Daily ops — INTENTIONALLY skipped. Daily cleanup tasks (biohazard,
+    //    scrubs, PPE, par checks, walk-throughs) are date-specific. If they
+    //    weren't done on the day, there's no value in rolling them forward —
+    //    they just create noise in the rollover section.
 
     // 3) Custom tasks scheduled in past — also roll over
     customTasksVisibleToCurrent().forEach(ct => {
@@ -2393,8 +2370,20 @@ const MEDTRONIC_PAR = [
       });
     });
 
-    // Sort oldest first
-    overdue.sort((a, b) => a.scheduledKey.localeCompare(b.scheduledKey));
+    // Sort: event-related tasks grouped by their event date (events happening
+    // soonest float to the top), then by offset within the event (T-7 before
+    // T-3 before Day-of). Custom tasks sort by their own scheduled date.
+    overdue.sort((a, b) => {
+      const aEventDate = (a.event && a.event.start_dt) ? a.event.start_dt.slice(0, 10) : a.scheduledKey;
+      const bEventDate = (b.event && b.event.start_dt) ? b.event.start_dt.slice(0, 10) : b.scheduledKey;
+      if (aEventDate !== bEventDate) return aEventDate.localeCompare(bEventDate);
+      // same event — sort by offset (largest first = T-7 before T-3 before Day-of)
+      const aOff = (a.relativeLabel || '').match(/^T-(\d+)/);
+      const bOff = (b.relativeLabel || '').match(/^T-(\d+)/);
+      const aN = aOff ? parseInt(aOff[1], 10) : 0;
+      const bN = bOff ? parseInt(bOff[1], 10) : 0;
+      return bN - aN;
+    });
     return overdue;
   }
 
