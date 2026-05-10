@@ -999,13 +999,15 @@ const ADMIN_CONFIG = {
   ],
 
   // ── Restocking Email ─────────────────────────────────────────────
+  // Bert Clark receives shipments at the Jax Lab and signs all restock
+  // emails. Cc Josh so he sees outgoing orders.
   restockEmail: {
     to:      "customerservice@medtronic.com",   // ← REPLACE with actual customer service address
     cc:      "josh.a.register@medtronic.com",
     fromLab: "Jacksonville Bioskills Lab",
     address: "6743 Southpoint Drive North, Jacksonville, Florida 32216",
-    contactName:  "Josh Register",
-    contactEmail: "josh.a.register@medtronic.com",
+    contactName:  "Bert Clark",
+    contactEmail: "",                             // ← add Bert's email when available
     contactPhone: "",                             // optional
   },
 };
@@ -1581,44 +1583,44 @@ const LAB_VARIANTS = {
 // ═══════════════════════════════════════════════════════════════════
 const EMAIL_TEMPLATES = {
   lab: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for the upcoming ENT Immersion Lab on {eventDate}{?surgeon  with {surgeon}}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to replenish after the ENT Immersion Lab on {eventDate}{?surgeon  with {surgeon}}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for the upcoming ENT Immersion Lab on {eventDate}{?surgeon  with {surgeon}}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to replenish after the ENT Immersion Lab on {eventDate}{?surgeon  with {surgeon}}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   training: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for the upcoming training session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to replenish after the training session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for the upcoming training session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to replenish after the training session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   rd: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for an upcoming R&D session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to replenish after the R&D session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for an upcoming R&D session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to replenish after the R&D session on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   cleanup: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for cleanup / restocking on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to restock after cleanup on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for cleanup / restocking on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to restock after cleanup on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   specimenDelivery: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for an upcoming specimen delivery on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} following the specimen delivery on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for an upcoming specimen delivery on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} following the specimen delivery on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   specimenPickup: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for an upcoming specimen pickup on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} following the specimen pickup on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for an upcoming specimen pickup on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} following the specimen pickup on {eventDate}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   install: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for the upcoming install on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} after the install on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for the upcoming install on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} after the install on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   meeting: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for an upcoming meeting on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} following the meeting on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for an upcoming meeting on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} following the meeting on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   other: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} for the upcoming event on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to replenish after the event on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} for the upcoming event on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to replenish after the event on {eventDate} ({eventTitle}).\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
   inventory: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to bring our inventory back up to par at the {fromLab}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to my attention at {address} to bring our inventory back up to par at the {fromLab}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to bring our inventory back up to par at the {fromLab}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
+    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address} to bring our inventory back up to par at the {fromLab}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
   },
 };
 
