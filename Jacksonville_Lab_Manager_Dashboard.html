@@ -1036,17 +1036,17 @@ const TASK_TEMPLATES = {
       { id: "confirm-attendance", offset: 30, text: "Confirm surgeon & rep attendance (call/email)",                          roles: ["anamaria"] },
       { id: "send-confirmation",  offset: 7,  text: "Meeting planner: send final details to surgeon & rep",                    roles: ["anamaria"] },
       { id: "confirm-specimens",  offset: 45, text: "Confirm specimen order with Science Care / Meri",                         roles: ["anamaria"] },
-      { id: "verify-trays",       offset: 3,  text: "Verify and set up instruments",                                            roles: ["bert"] },
+      { id: "verify-trays",       offset: 3,  text: "Verify and set up instruments",                                            roles: ["bert","latisha"] },
       { id: "scan-specimens",     offset: 2,  text: "Scan specimens (CT for navigation registration)",                          roles: ["bert"] },
       { id: "load-stealth",       offset: 1,  text: "Load specimen scan on StealthStation",                                     roles: ["bert"] },
       { id: "receive-specimens",  offset: 1,  text: "Receive & log specimens into freezer",                                     roles: ["bert"] },
-      { id: "setup-room",         offset: 1,  text: "Set up lab room — tables, draping, PPE, supplies",                         roles: ["bert"] },
+      { id: "setup-room",         offset: 1,  text: "Set up lab room — tables, draping, PPE, supplies",                         roles: ["bert","latisha"] },
       { id: "print-handouts",     offset: 1,  text: "Print agenda",                                                              roles: ["anamaria"] },
       { id: "greet-attendees",    offset: 0,  text: "Greet attendees" }, // visible to all
-      { id: "run-session",        offset: 0,  text: "Run lab session — capture before/after photos",                            roles: ["bert"] },
-      { id: "decontaminate",      offset: -1, text: "Decontaminate & deep-clean lab room",                                       roles: ["bert"] },
+      { id: "run-session",        offset: 0,  text: "Run lab session — capture before/after photos",                            roles: ["bert","latisha"] },
+      { id: "decontaminate",      offset: -1, text: "Decontaminate & deep-clean lab room",                                       roles: ["bert","latisha"] },
       { id: "specimen-disposal",  offset: -1, text: "Pack specimens in freezer, label, ready for shipping out",                  roles: ["bert"] },
-      { id: "restock",            offset: -1, text: "Restock disposables & consumables — gloves, drapes, blades",                roles: ["bert"] },
+      { id: "restock",            offset: -1, text: "Restock disposables & consumables — gloves, drapes, blades",                roles: ["bert","latisha"] },
       { id: "send-thankyou",      offset: -1, text: "Send thank-you / feedback survey to attendees",                            roles: ["anamaria"] },
       { id: "thankyou-surgeon",   offset: -1, text: "Send personal thank-you email to attending surgeon",                       roles: ["master"] },
       { id: "send-recap-sales",   offset: -1, text: "Send recap email to Sales force & Sales Leadership (MKTG cc'd)",           roles: ["anamaria"] },
@@ -1096,9 +1096,9 @@ const TASK_TEMPLATES = {
     label: "Cleanup",
     cssClass: "type-cleanup",
     tasks: [
-      { id: "decontaminate",  offset: 0, text: "Decontaminate lab room — surfaces, drains, instruments", roles: ["bert"] },
-      { id: "autoclave",      offset: 0, text: "Run autoclave for instruments",                            roles: ["bert"] },
-      { id: "restock-ppe",    offset: 0, text: "Restock PPE, gloves, drapes",                              roles: ["bert"] },
+      { id: "decontaminate",  offset: 0, text: "Decontaminate lab room — surfaces, drains, instruments", roles: ["bert","latisha"] },
+      { id: "autoclave",      offset: 0, text: "Run autoclave for instruments",                            roles: ["bert","latisha"] },
+      { id: "restock-ppe",    offset: 0, text: "Restock PPE, gloves, drapes",                              roles: ["bert","latisha"] },
       { id: "update-log",     offset: 0, text: "Update inventory & cleanup log",                            roles: ["bert"] },
     ],
   },
@@ -1121,8 +1121,8 @@ const TASK_TEMPLATES = {
     cssClass: "type-rd",
     tasks: [
       { id: "confirm-team",      offset: 2, text: "Confirm R&D / engineering team & equipment list",                  roles: ["bert"] },
-      { id: "prep-station",      offset: 1, text: "Prep recording / R&D station (lighting, cameras, instruments)",     roles: ["bert"] },
-      { id: "test-recording",    offset: 0, text: "Test recording / capture setup before kickoff",                     roles: ["bert"] },
+      { id: "prep-station",      offset: 1, text: "Prep recording / R&D station (lighting, cameras, instruments)",     roles: ["bert","latisha"] },
+      { id: "test-recording",    offset: 0, text: "Test recording / capture setup before kickoff",                     roles: ["bert","latisha"] },
     ],
   },
 
@@ -1833,6 +1833,7 @@ const MEDTRONIC_PAR = [
       <div class="chip" data-filter="incomplete">Incomplete only</div>
     </div>
     <button class="btn" id="btn-share-links" type="button" title="Get role-specific share links">🔗 Share links</button>
+    <button class="btn" id="btn-cs-email" type="button" title="Compose a Customer Service order email anytime">📧 Email Customer Service</button>
     <button class="btn" id="btn-cadaver-log" type="button" title="View full cadaver log">📋 Cadaver Log</button>
     <button class="btn" id="btn-collapse" type="button" title="Collapse all days">⌄ Collapse all</button>
     <button class="btn primary" id="btn-refresh" type="button">↻ Refresh</button>
@@ -2805,10 +2806,6 @@ const MEDTRONIC_PAR = [
     }
     if (CURRENT_VIEW === 'calendar') {
       renderCalendarView();
-      return;
-    }
-    if (CURRENT_ROLE_KEY === 'latisha') {
-      renderLatishaView();
       return;
     }
 
@@ -4098,10 +4095,11 @@ const MEDTRONIC_PAR = [
     const today = new Date(); today.setHours(0,0,0,0);
     const todayKey = ymd(today);
 
-    // Start from the SUNDAY of this week
+    // Start from the SUNDAY of this week. 4 weeks fits ~28 days of upcoming
+    // events comfortably without dominating the page.
     const start = new Date(today);
     start.setDate(today.getDate() - today.getDay());
-    const numWeeks = compact ? 5 : 6;
+    const numWeeks = compact ? 3 : 4;
     const cells = [];
     for (let i = 0; i < numWeeks * 7; i++) {
       const d = addDays(start, i);
@@ -4960,6 +4958,27 @@ const MEDTRONIC_PAR = [
     // Hide cadaver log button for roles that don't see it
     const cadBtn = document.getElementById('btn-cadaver-log');
     if (cadBtn) cadBtn.style.display = CURRENT_ROLE.showCadaverLog ? '' : 'none';
+    // Customer Service email shortcut — Master + Bert only
+    const csBtn = document.getElementById('btn-cs-email');
+    if (csBtn) {
+      const showCS = (CURRENT_ROLE_KEY === 'master' || CURRENT_ROLE_KEY === 'bert');
+      csBtn.style.display = showCS ? '' : 'none';
+      if (showCS) {
+        csBtn.addEventListener('click', () => {
+          // Open the restock modal with a synthetic inventory event so it
+          // works anytime (no specific event needed)
+          const todayKey = ymd(new Date());
+          const syntheticEvt = {
+            id: 'inventory_' + todayKey,
+            title: 'Customer Service order',
+            start_dt: todayKey,
+            end_dt: todayKey,
+            who: '',
+          };
+          openRestockModal(syntheticEvt, 'inventory');
+        });
+      }
+    }
     // Hide share-links button outside master view
     const shareBtn = document.getElementById('btn-share-links');
     if (shareBtn) shareBtn.style.display = CURRENT_ROLE_KEY === 'master' ? '' : 'none';
