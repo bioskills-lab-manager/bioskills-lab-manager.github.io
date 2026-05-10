@@ -2187,6 +2187,9 @@ const MEDTRONIC_PAR = [
     state.events.forEach(evt => {
       // Role-level event filter (Latisha sees only events tagged for her)
       if (!isEventVisibleForRole(evt)) return;
+      // Bert's day-by-day prep tasks are only for Jacksonville Lab events.
+      // Road events show up only on his hero card, not as prep-task days.
+      if (CURRENT_ROLE_KEY === 'bert' && evt.subcalendar_id !== cfg.jacksonvilleSubcalId) return;
 
       const startKey = (evt.start_dt || '').slice(0, 10);
       const endKey = (evt.end_dt || evt.start_dt || '').slice(0, 10);
@@ -2752,15 +2755,20 @@ const MEDTRONIC_PAR = [
     // glanceable list of events they're tagged on, before the prep-task days.
     let upcomingHero = '';
     if (CURRENT_ROLE_KEY === 'bert') {
-      // Bert sees ALL upcoming Jax lab events — he's responsible for cadaver
-      // prep, scanning, instrument setup regardless of who runs the lab.
-      // The "Who" badge on each card tells him who's covering that day.
+      // Bert: ALL Jacksonville Lab events + road events where he's tagged.
+      // Card is collapsible — show first 3, expand to see the rest.
       upcomingHero = buildUpcomingEventsHeroHtml('', '0,131,143', {
         accentHex: '#00838f', accentHexEnd: '#00acc1', accentLight: '#e0f7fa',
-        eyebrow: 'Upcoming Jax Lab events',
+        eyebrow: 'Upcoming events',
         subtitle: '',
         emptyTitle: 'No upcoming events',
-        emptyMessage: 'There are no Jacksonville Lab events scheduled in the next 30 days.',
+        emptyMessage: 'There are no events scheduled in the next 30 days.',
+        extraFilter: (evt) => {
+          if (evt.subcalendar_id === ADMIN_CONFIG.jacksonvilleSubcalId) return true;
+          const who = (evt.who || '').toLowerCase();
+          return who.includes('bert');
+        },
+        collapsibleAfter: 3,
       });
     } else if (CURRENT_ROLE_KEY === 'anamaria') {
       upcomingHero = buildUpcomingEventsHeroHtml('ana', '194,24,91', {
@@ -2888,6 +2896,27 @@ const MEDTRONIC_PAR = [
         const date = btn.getAttribute('data-date');
         const eventId = btn.getAttribute('data-event-id') || null;
         openCustomTaskModal(date, eventId);
+      });
+    });
+
+    // Wire up the hero "Show N more events" / "Show less" toggle
+    dashEl.querySelectorAll('.btn-hero-expand').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const extra = btn.previousElementSibling;
+        if (!extra || !extra.classList.contains('hero-extra-events')) return;
+        const isHidden = extra.style.display === 'none' || !extra.style.display;
+        if (isHidden) {
+          extra.style.display = 'block';
+          // Re-render the button label
+          const more = extra.children.length;
+          btn.innerHTML = `Show less ↑`;
+        } else {
+          extra.style.display = 'none';
+          const more = extra.children.length;
+          btn.innerHTML = `Show ${more} more event${more === 1 ? '' : 's'} ↓`;
+        }
       });
     });
 
@@ -3723,11 +3752,13 @@ const MEDTRONIC_PAR = [
     const todayKey = ymd(today);
     const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
 
-    // Filter events by who/title/notes (case-insensitive)
+    // Filter events: either by who/title/notes containing filterKey,
+    // OR by a custom predicate function (extraFilter) for richer logic.
     const lowerKey = (filterKey || '').toLowerCase();
     const upcoming = state.events.filter(evt => {
       const startKey = (evt.start_dt || '').slice(0, 10);
       if (!startKey || startKey < todayKey || startKey > horizon) return false;
+      if (typeof options.extraFilter === 'function') return options.extraFilter(evt);
       if (!lowerKey) return true;
       const who   = (evt.who   || '').toLowerCase();
       const title = (evt.title || '').toLowerCase();
@@ -3764,7 +3795,7 @@ const MEDTRONIC_PAR = [
       `;
     }
 
-    const cards = upcoming.map(evt => {
+    const cardArray = upcoming.map(evt => {
       const startKey = (evt.start_dt || '').slice(0, 10);
       const startD = parseYMD(startKey);
       const cat = classifyEvent(evt);
@@ -3806,8 +3837,27 @@ const MEDTRONIC_PAR = [
           </div>
         </div>
       `;
-    }).join('');
+    });
 
+    // Collapsible: if collapsibleAfter is set, show first N cards visible,
+    // wrap the rest in a hidden div with a toggle button.
+    const collapseAfter = options.collapsibleAfter;
+    let cards;
+    if (collapseAfter && cardArray.length > collapseAfter) {
+      const visible = cardArray.slice(0, collapseAfter).join('');
+      const hidden = cardArray.slice(collapseAfter).join('');
+      const moreCount = cardArray.length - collapseAfter;
+      cards = `
+        ${visible}
+        <div class="hero-extra-events" style="display:none;">${hidden}</div>
+        <button type="button" class="btn-hero-expand" data-action="expand"
+                style="display:block;margin:0 auto 14px;background:#fff;border:1.5px solid ${options.accentHex || '#003da5'};color:${options.accentHex || '#003da5'};font-size:0.82rem;font-weight:700;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;">
+          Show ${moreCount} more event${moreCount === 1 ? '' : 's'} ↓
+        </button>
+      `;
+    } else {
+      cards = cardArray.join('');
+    }
     return heroHtml + cards;
   }
 
@@ -3837,18 +3887,18 @@ const MEDTRONIC_PAR = [
     // Pad start by 7 days backward so we still see prep tasks for events that already started
     const startPadded = ymd(addDays(today, -10));
 
-    // Latisha can be scheduled on any sub-calendar (Mobile Labs, Sales Training,
-    // 3rd Party Labs, etc.), so fetch the entire Teamup for her and filter by
-    // name. All other roles only see Jacksonville Lab.
-    const subcalParam = (CURRENT_ROLE_KEY === 'latisha')
-      ? ''
-      : `&subcalendarId[]=${cfg.jacksonvilleSubcalId}`;
+    // Latisha and Bert both work events outside the Jacksonville sub-calendar
+    // (Mobile Labs, Sales Training, 3rd Party Labs, etc.), so fetch the
+    // entire Teamup for them. The hero will filter — Jax events for Bert
+    // by default, plus road events where he's tagged in "who".
+    const fetchAllSubcals = (CURRENT_ROLE_KEY === 'latisha' || CURRENT_ROLE_KEY === 'bert');
+    const subcalParam = fetchAllSubcals ? '' : `&subcalendarId[]=${cfg.jacksonvilleSubcalId}`;
     const url = `https://api.teamup.com/${cfg.teamupCalendarKey}/events?startDate=${startPadded}&endDate=${end}${subcalParam}`;
 
     try {
-      // For Latisha: also fetch sub-calendar names so we can show where she's
-      // scheduled. Done in parallel with the events fetch.
-      const subcalsPromise = (CURRENT_ROLE_KEY === 'latisha')
+      // For Latisha and Bert: also fetch sub-calendar names so we can label
+      // road events ("ENT Mobile Labs", "Sales: AXiS Launch", etc.).
+      const subcalsPromise = fetchAllSubcals
         ? fetch(`https://api.teamup.com/${cfg.teamupCalendarKey}/subcalendars`, { headers: { 'Teamup-Token': cfg.teamupApiToken } })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null)
