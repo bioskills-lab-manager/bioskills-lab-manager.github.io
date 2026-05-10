@@ -971,12 +971,15 @@ function isTaskVisibleForRole(task) {
   return task.roles.includes(CURRENT_ROLE.taskRoleFilter);
 }
 
-// Event filter — Latisha sees only events where her name appears in title
+// Event filter — Latisha sees only events where her name appears in
+// the Teamup "who" field (or, as a fallback, in the title or notes).
 function isEventVisibleForRole(evt) {
   const filterKey = CURRENT_ROLE.eventFilterKey;
   if (!filterKey) return true;
+  const who   = (evt.who || '').toLowerCase();
   const title = (evt.title || '').toLowerCase();
-  return title.includes(filterKey);
+  const notes = (evt.notes || '').toLowerCase();
+  return who.includes(filterKey) || title.includes(filterKey) || notes.includes(filterKey);
 }
 
 const ADMIN_CONFIG = {
@@ -2757,13 +2760,30 @@ const MEDTRONIC_PAR = [
       return;
     }
 
+    // Per-role upcoming-events hero (top of view) — gives Bert / Ana Maria a
+    // glanceable list of events they're tagged on, before the prep-task days.
+    let upcomingHero = '';
+    if (CURRENT_ROLE_KEY === 'bert') {
+      upcomingHero = buildUpcomingEventsHeroHtml('bert', '0,131,143', {
+        accentHex: '#00838f', accentHexEnd: '#00acc1', accentLight: '#e0f7fa',
+        eyebrow: 'Your upcoming events',
+        emptyTitle: 'No events scheduled with your name yet',
+      });
+    } else if (CURRENT_ROLE_KEY === 'anamaria') {
+      upcomingHero = buildUpcomingEventsHeroHtml('ana', '194,24,91', {
+        accentHex: '#c2185b', accentHexEnd: '#e91e63', accentLight: '#fce4ec',
+        eyebrow: 'Your upcoming events',
+        emptyTitle: 'No events scheduled with your name yet',
+      });
+    }
+
     const visibleDays = state.days.filter(shouldShowDay);
     if (visibleDays.length === 0) {
-      dashEl.innerHTML = `<div class="event-info"><div class="info-icon">i</div><div>No days match the current filter.</div></div>`;
+      dashEl.innerHTML = upcomingHero + `<div class="event-info"><div class="info-icon">i</div><div>No days match the current filter.</div></div>`;
       return;
     }
 
-    dashEl.innerHTML = visibleDays.map(renderDay).join('');
+    dashEl.innerHTML = upcomingHero + visibleDays.map(renderDay).join('');
 
     // Wire up checkbox toggles
     dashEl.querySelectorAll('label.task').forEach(lbl => {
@@ -3700,36 +3720,51 @@ const MEDTRONIC_PAR = [
     });
   }
 
-  // ── Latisha's view: clean upcoming-events list ───────────────────
-  function renderLatishaView() {
+  // ── Reusable: upcoming-events hero (used by Latisha + Bert + Ana Maria) ──
+  // Returns HTML for a hero banner + event cards. Filters state.events by
+  // checking who/title/notes for filterKey. Useful as the top of any team
+  // member's view to show "what's on your plate".
+  function buildUpcomingEventsHeroHtml(filterKey, accentRgb, options) {
+    options = options || {};
     const today = new Date(); today.setHours(0,0,0,0);
     const todayKey = ymd(today);
     const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
 
-    // Filter: Latisha's events (already filtered by isEventVisibleForRole) within window, today + future
+    // Filter events by who/title/notes (case-insensitive)
+    const lowerKey = (filterKey || '').toLowerCase();
     const upcoming = state.events.filter(evt => {
       const startKey = (evt.start_dt || '').slice(0, 10);
-      return startKey && startKey >= todayKey && startKey <= horizon;
+      if (!startKey || startKey < todayKey || startKey > horizon) return false;
+      if (!lowerKey) return true;
+      const who   = (evt.who   || '').toLowerCase();
+      const title = (evt.title || '').toLowerCase();
+      const notes = (evt.notes || '').toLowerCase();
+      return who.includes(lowerKey) || title.includes(lowerKey) || notes.includes(lowerKey);
     }).sort((a, b) => (a.start_dt || '').localeCompare(b.start_dt || ''));
 
-    // Hero banner
+    const accent = accentRgb || '106,27,154';
+    const accentHex = options.accentHex || '#6a1b9a';
+    const accentHexEnd = options.accentHexEnd || '#8e24aa';
+    const accentLight = options.accentLight || '#f3e5f5';
+
     const heroHtml = `
-      <div style="background:linear-gradient(135deg,#6a1b9a 0%,#8e24aa 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:18px;box-shadow:0 4px 18px rgba(106,27,154,0.18);">
-        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">Upcoming events</div>
-        <div style="font-size:1.5rem;font-weight:700;margin-bottom:6px;">${upcoming.length === 0 ? "Nothing scheduled yet" : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
-        <div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">Each card below shows the date, location, and the cost center to charge for that day.</div>
+      <div style="background:linear-gradient(135deg,${accentHex} 0%,${accentHexEnd} 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:18px;box-shadow:0 4px 18px rgba(${accent},0.18);">
+        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">${escapeHtml(options.eyebrow || 'Upcoming events')}</div>
+        <div style="font-size:1.5rem;font-weight:700;margin-bottom:6px;">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
+        <div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(options.subtitle || 'Each card shows the date, location, and the cost center to charge for that day.')}</div>
       </div>
     `;
 
     if (upcoming.length === 0) {
-      dashEl.innerHTML = heroHtml + `
-        <div style="background:#fff;border-radius:12px;padding:40px 30px;text-align:center;color:#888;font-size:0.95rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+      const emptyMsg = options.emptyMessage
+        || `When Josh adds your name to the <strong>"Who"</strong> field on a Teamup event, it will show up here automatically.`;
+      return heroHtml + `
+        <div style="background:#fff;border-radius:12px;padding:40px 30px;text-align:center;color:#888;font-size:0.95rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);margin-bottom:18px;">
           <div style="font-size:2.2rem;margin-bottom:10px;">📅</div>
-          <div style="font-weight:600;color:#1a1a2e;margin-bottom:6px;">No events tagged with your name yet</div>
-          <div>When Josh schedules you, he'll add your name to the event title in Teamup. Events will show up here automatically.</div>
+          <div style="font-weight:600;color:#1a1a2e;margin-bottom:6px;">${escapeHtml(options.emptyTitle || 'No events scheduled with your name yet')}</div>
+          <div>${emptyMsg}</div>
         </div>
       `;
-      return;
     }
 
     const cards = upcoming.map(evt => {
@@ -3752,8 +3787,8 @@ const MEDTRONIC_PAR = [
       const awayLabel = isToday ? '' : isTomorrow ? '' : `in ${daysAway} day${daysAway === 1 ? '' : 's'}`;
 
       return `
-        <div style="background:#fff;border-radius:14px;padding:0;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden;display:flex;${isToday ? 'border:2px solid #6a1b9a;' : ''}">
-          <div style="background:${isToday ? '#6a1b9a' : '#f3e5f5'};color:${isToday ? '#fff' : '#6a1b9a'};padding:18px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px;">
+        <div style="background:#fff;border-radius:14px;padding:0;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden;display:flex;${isToday ? 'border:2px solid ' + accentHex + ';' : ''}">
+          <div style="background:${isToday ? accentHex : accentLight};color:${isToday ? '#fff' : accentHex};padding:18px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px;">
             <div style="font-size:0.7rem;font-weight:700;letter-spacing:1.2px;">${escapeHtml(whenLabel)}</div>
             <div style="font-size:2.2rem;font-weight:700;line-height:1;margin:4px 0;">${dayNum}</div>
             <div style="font-size:0.78rem;font-weight:600;letter-spacing:0.4px;">${escapeHtml(monthAbbr)}</div>
@@ -3761,21 +3796,32 @@ const MEDTRONIC_PAR = [
           </div>
           <div style="padding:18px 24px;flex:1;">
             <div style="font-size:1.05rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">${escapeHtml(evt.title || '(untitled)')}</div>
-            ${subcalName ? `<div style="margin-bottom:8px;"><span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:#eef2fb;color:#003da5;text-transform:uppercase;">${escapeHtml(subcalName)}</span></div>` : ''}
+            <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
+              ${subcalName ? `<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:#eef2fb;color:#003da5;text-transform:uppercase;">${escapeHtml(subcalName)}</span>` : ''}
+              ${evt.who ? `<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:${accentLight};color:${accentHex};text-transform:uppercase;">👤 ${escapeHtml(evt.who)}</span>` : ''}
+            </div>
             <div style="font-size:0.88rem;color:#666;margin-top:6px;">
-              💰 <strong>Charge to:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:#6a1b9a;font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})
+              💰 <strong>Charge to:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:${accentHex};font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})
             </div>
             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="btn-add-custom" data-date="${escapeHtml(startKey)}" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px dashed #6a1b9a;color:#6a1b9a;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add personal note</button>
+              <button type="button" class="btn-add-custom" data-date="${escapeHtml(startKey)}" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px dashed ${accentHex};color:${accentHex};font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add personal note</button>
             </div>
           </div>
         </div>
       `;
     }).join('');
 
-    dashEl.innerHTML = heroHtml + cards;
+    return heroHtml + cards;
+  }
 
-    // Wire add-custom buttons
+  // Latisha: hero-only view (no day-by-day prep tasks since she's a contractor)
+  function renderLatishaView() {
+    dashEl.innerHTML = buildUpcomingEventsHeroHtml('latisha', '106,27,154', {
+      accentHex: '#6a1b9a',
+      accentHexEnd: '#8e24aa',
+      accentLight: '#f3e5f5',
+    });
+    // Wire add-custom buttons (rendered inside the hero cards)
     dashEl.querySelectorAll('.btn-add-custom').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation(); e.preventDefault();
