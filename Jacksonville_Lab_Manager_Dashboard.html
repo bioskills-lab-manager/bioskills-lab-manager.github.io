@@ -1600,48 +1600,40 @@ const LAB_VARIANTS = {
 // Special syntax: {?varName text using {varName}} renders the inner
 // text only if varName is non-empty.
 // ═══════════════════════════════════════════════════════════════════
-const EMAIL_TEMPLATES = {
-  lab: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  training: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  rd: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  cleanup: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  specimenDelivery: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  specimenPickup: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  install: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  meeting: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  other: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
-  inventory: {
-    pre:  "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-    post: "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:",
-  },
+// Default body — Josh's standard ask. Used for every category unless
+// overridden below. Editing this string changes every category at once.
+const DEFAULT_EMAIL_BODY = "Hi customer service team,\n\nCan you please order the following delivered to Bert Clark’s attention at {address}.\n\nCost Center is {dsmCC} ({dsmName}).\n\nPlease order the following:";
+
+// Per-category overrides — only define entries here when a category needs
+// a different body than DEFAULT_EMAIL_BODY (e.g. a real post-event variant).
+// All categories without an override fall back to DEFAULT_EMAIL_BODY for
+// both pre/post via the lookup helper at the bottom of this section.
+const EMAIL_TEMPLATE_OVERRIDES = {
+  // Example shape — uncomment + edit when a category genuinely diverges:
+  // specimenPickup: { post: "Hi customer service team,\n\nFollowing the {tmplLabel} on {eventDate}..." },
 };
+
+// Lookup helper — resolves category + timing to a body string with the
+// override-then-default fallback chain.
+function resolveEmailTemplate(category, timing) {
+  const override = EMAIL_TEMPLATE_OVERRIDES[category];
+  if (override && override[timing]) return override[timing];
+  return DEFAULT_EMAIL_BODY;
+}
+
+// Back-compat shim: any code that reads EMAIL_TEMPLATES[cat] expects an
+// object with .pre/.post strings. Build that object lazily so the rest of
+// the dashboard keeps working without changes.
+const EMAIL_TEMPLATES = new Proxy({}, {
+  get(_, cat) {
+    if (typeof cat !== 'string') return undefined;
+    return {
+      pre:  resolveEmailTemplate(cat, 'pre'),
+      post: resolveEmailTemplate(cat, 'post'),
+    };
+  },
+  has() { return true; },
+});
 
 // Closing block (appended after items table + optional notes)
 // {?contactEmail \n{contactEmail}} so an empty email doesn't leave a blank line.
@@ -2214,6 +2206,15 @@ const MEDTRONIC_PAR = [
     nd.setDate(nd.getDate() + n);
     return nd;
   }
+  // Whole-day diff that's safe across DST transitions. Naive subtraction
+  // produces 23h or 25h spans on spring-forward/fall-back Sundays, which
+  // throws off "X days ago" labels by one. Normalizing both sides to noon
+  // makes any DST shift fall comfortably inside the day.
+  function daysBetween(later, earlier) {
+    const a = new Date(later.getFullYear(), later.getMonth(), later.getDate(), 12, 0, 0);
+    const b = new Date(earlier.getFullYear(), earlier.getMonth(), earlier.getDate(), 12, 0, 0);
+    return Math.round((a - b) / 86400000);
+  }
   function isWeekend(d) { return d.getDay() === 0 || d.getDay() === 6; }
   function isToday(d) {
     const t = new Date();
@@ -2246,15 +2247,44 @@ const MEDTRONIC_PAR = [
   }
 
   // ── Storage ───────────────────────────────────────────────────────
-  function storageKey() { return cfg.storageNamespace + '.checks'; }
-  function loadChecks() {
+  // User-specific localStorage keys are role-namespaced so two roles on the
+  // same device (e.g. Josh + Bert sharing an iPad at the lab) don't overwrite
+  // each other's check-state, par counts, or UI preferences.
+  function userKey(suffix) {
+    return cfg.storageNamespace + '.' + suffix + ':' + CURRENT_ROLE_KEY;
+  }
+  // Read a user-scoped value, falling back to the legacy un-namespaced key
+  // exactly once (so existing data migrates the first time we read it).
+  function getUserItem(suffix) {
     try {
-      const raw = localStorage.getItem(storageKey());
-      return raw ? JSON.parse(raw) : {};
-    } catch (e) { return {}; }
+      const v = localStorage.getItem(userKey(suffix));
+      if (v != null) return v;
+      // Legacy fallback — for the master role only, since the un-namespaced
+      // data was created before namespacing existed and was effectively Josh's.
+      if (CURRENT_ROLE_KEY === 'master') {
+        const legacy = localStorage.getItem(cfg.storageNamespace + '.' + suffix);
+        if (legacy != null) {
+          // Migrate: copy to namespaced key so future reads are direct.
+          try { localStorage.setItem(userKey(suffix), legacy); } catch (e) {}
+          return legacy;
+        }
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+  function setUserItem(suffix, value) {
+    try { localStorage.setItem(userKey(suffix), value); } catch (e) {}
+  }
+  function removeUserItem(suffix) {
+    try { localStorage.removeItem(userKey(suffix)); } catch (e) {}
+  }
+
+  function loadChecks() {
+    const raw = getUserItem('checks');
+    try { return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
   }
   function saveChecks(checks) {
-    try { localStorage.setItem(storageKey(), JSON.stringify(checks)); } catch (e) {}
+    setUserItem('checks', JSON.stringify(checks));
   }
   let CHECKS = loadChecks();
 
@@ -2536,7 +2566,7 @@ const MEDTRONIC_PAR = [
 
   function fmtRolloverDate(d) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const diff = Math.round((today - d) / 86400000);
+    const diff = daysBetween(today, d);
     if (diff === 1) return 'yesterday';
     if (diff <= 7) return `${diff} days ago`;
     return `${DOW[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
@@ -2823,7 +2853,7 @@ const MEDTRONIC_PAR = [
             </label>
           `;
         }).join('');
-        const collapsed = localStorage.getItem(ADMIN_CONFIG.storageNamespace + '.rollover.collapsed') === '1';
+        const collapsed = getUserItem('rollover.collapsed') === '1';
         rolledHtml = `
           <div class="daily-ops-block rollover-block ${collapsed ? 'collapsed' : ''}" style="background:#fffaef;border:1px solid #f5e0ad;margin-top:10px;">
             <div class="ops-title rollover-toggle"
@@ -3127,7 +3157,7 @@ const MEDTRONIC_PAR = [
         body.style.display = willCollapse ? 'none' : '';
         if (chev) chev.style.transform = willCollapse ? 'rotate(-90deg)' : '';
         if (label) label.textContent = willCollapse ? 'Show' : 'Hide';
-        localStorage.setItem(ADMIN_CONFIG.storageNamespace + '.rollover.collapsed', willCollapse ? '1' : '0');
+        setUserItem('rollover.collapsed', willCollapse ? '1' : '0');
       });
     });
   }
@@ -3184,7 +3214,8 @@ const MEDTRONIC_PAR = [
     variantSelect.innerHTML = opts;
   })();
 
-  // Per-event variant preferences (sticky)
+  // Per-event variant preferences (sticky, shared across roles — the variant
+  // is a property of the lab event itself, not a per-user preference).
   function loadVariantPrefs() {
     try {
       const raw = localStorage.getItem(ADMIN_CONFIG.storageNamespace + '.variantPrefs');
@@ -3242,7 +3273,8 @@ const MEDTRONIC_PAR = [
     }
   });
 
-  // ── Per-event DSM preferences (sticky across sessions) ──────────
+  // ── Per-event DSM preferences (shared across roles — the DSM is a property
+  // of the event itself, not a per-user preference) ──────────────────
   function loadDsmPrefs() {
     try {
       const raw = localStorage.getItem(ADMIN_CONFIG.storageNamespace + '.dsmPrefs');
@@ -3556,8 +3588,12 @@ const MEDTRONIC_PAR = [
   function openCadaverModal(evt, category) {
     cadaverEditState = { event: evt, category: category, editingId: null };
     const eventDate = (evt.start_dt || '').slice(0, 10);
-    const eventD = parseYMD(eventDate);
-    const eventDateStr = MONTHS_SHORT[eventD.getMonth()] + ' ' + eventD.getDate() + ', ' + eventD.getFullYear();
+    // Guard: editing an entry whose original event has aged out gives us
+    // a synthetic evt with possibly empty/malformed start_dt. Don't NaN.
+    const eventD = eventDate ? parseYMD(eventDate) : null;
+    const eventDateStr = (eventD && !isNaN(eventD.getTime()))
+      ? `${MONTHS_SHORT[eventD.getMonth()]} ${eventD.getDate()}, ${eventD.getFullYear()}`
+      : '(date unknown)';
 
     cadaverModalTitle.textContent = (category === 'specimenPickup') ? 'Cadaver Log — Disposal / Pickup' : 'Cadaver Log — Intake / Delivery';
     cadaverContext.innerHTML = `<strong>Linked event:</strong> ${escapeHtml(evt.title || '(untitled)')}<br/><strong>Event date:</strong> ${eventDateStr}`;
@@ -3638,8 +3674,11 @@ const MEDTRONIC_PAR = [
     }
     saveCadaverLog(log);
 
-    // Auto-check the "update-cadaver-log" task for this event
-    setChecked('evt:' + evt.id + ':update-cadaver-log', true);
+    // Auto-check the "update-cadaver-log" task ONLY if this event still
+    // exists in the live calendar (otherwise we'd write a check key for an
+    // orphaned event that nothing renders against).
+    const eventStillLive = state.events && state.events.some(e => String(e.id) === String(evt.id));
+    if (eventStillLive) setChecked('evt:' + evt.id + ':update-cadaver-log', true);
     closeCadaverModal();
     renderAll();
 
@@ -3807,7 +3846,7 @@ const MEDTRONIC_PAR = [
     const todayKey = ymd(today);
     if (eventDate === todayKey) return 'Today';
     const d = parseYMD(eventDate);
-    const diff = Math.round((d - today) / 86400000);
+    const diff = daysBetween(d, today);
     if (diff === 1) return 'Tomorrow';
     if (diff > 0 && diff <= 7) return `In ${diff} days · ${DOW[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
     if (diff < 0 && diff >= -7) return `${Math.abs(diff)} day${diff === -1 ? '' : 's'} ago`;
@@ -4345,36 +4384,7 @@ const MEDTRONIC_PAR = [
     wireCalendarChipClicks();
   }
 
-  // ── Home View — Calendar + Today's To-Do side by side ────────────
-  function renderHomeView() {
-    const todayObj = state.days[0];
-    const calendarHtml = buildCalendarGridHtml({ compact: true });
-
-    // Make sure rolled-over starts visible on home view (a key way to
-    // surface missed prep when today's calendar is empty)
-    try { localStorage.removeItem(ADMIN_CONFIG.storageNamespace + '.rollover.collapsed'); } catch (e) {}
-
-    const todayCardHtml = todayObj ? renderDay(todayObj) : '<div class="empty-state-text">Nothing scheduled today.</div>';
-
-    // Today's date label
-    const today = new Date();
-    const todayLabel = `${DOW_FULL[today.getDay()]}, ${MONTHS_SHORT[today.getMonth()]} ${today.getDate()}`;
-
-    dashEl.innerHTML = `
-      <div class="home-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:flex-start;">
-        <div>
-          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">📅 Calendar</div>
-          ${calendarHtml}
-        </div>
-        <div>
-          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">📋 ${escapeHtml(todayLabel)}</div>
-          ${todayCardHtml}
-        </div>
-      </div>
-    `;
-    wireCalendarChipClicks();
-    wireDayViewControls();
-  }
+  // (Home view was removed — Day-by-day is now the default.)
 
   // ── Fetch from Teamup ──────────────────────────────────────────────
   async function fetchEvents() {
