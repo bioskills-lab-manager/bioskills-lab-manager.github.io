@@ -878,6 +878,18 @@
       /* Modal padding */
       .modal-backdrop { padding: 12px; }
       .modal-body { padding: 16px 18px; }
+      /* Tighter textarea so the action footer doesn't get pushed off-screen */
+      .modal-body textarea { min-height: 100px !important; }
+      /* Sticky footer so Send/Cancel stays reachable on tall modals */
+      .modal-footer {
+        position: sticky;
+        bottom: 0;
+        background: #fff;
+        border-top: 1px solid #eef1f6;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .modal-footer button { flex: 1 1 auto; min-width: 0; }
     }
   </style>
 </head>
@@ -3328,6 +3340,11 @@ const MEDTRONIC_PAR = [
         const idx = parseInt(btn.getAttribute('data-idx'), 10);
         restockState.items.splice(idx, 1);
         renderItemsTable();
+        // Refresh picker results so the just-removed PN flips back from
+        // "Added" (disabled) to "+ Add" without making the user clear/refocus.
+        if (pickerResults && pickerResults.classList.contains('open')) {
+          renderPicker(pickerInput.value.trim());
+        }
       });
     });
   }
@@ -3452,12 +3469,34 @@ const MEDTRONIC_PAR = [
     alert(body);
   });
 
-  modalSend.addEventListener('click', () => {
+  modalSend.addEventListener('click', async () => {
     const body = buildEmailBody();
+    // Strip CRLF from subject — newlines in mailto subjects break the header
+    const cleanSubject = (modalSubject.value || '').replace(/[\r\n]+/g, ' ').trim();
     const to = encodeURIComponent(modalTo.value || '');
     const cc = encodeURIComponent(modalCc.value || '');
-    const subj = encodeURIComponent(modalSubject.value || '');
+    const subj = encodeURIComponent(cleanSubject);
     const url = `mailto:${to}?cc=${cc}&subject=${subj}&body=${encodeURIComponent(body)}`;
+    // mailto: URLs over ~2000 chars get silently truncated by some clients
+    // (Outlook desktop, iOS Mail). With 20+ items we hit that easily.
+    if (url.length > 1900) {
+      const ok = confirm(
+        'This email is too long for some mail apps to open reliably (' +
+        url.length + ' chars). Click OK to copy the full email to your clipboard ' +
+        'and paste it into a fresh draft, or Cancel to try sending anyway.'
+      );
+      if (ok) {
+        try {
+          await navigator.clipboard.writeText(
+            `To: ${modalTo.value}\nCc: ${modalCc.value}\nSubject: ${cleanSubject}\n\n${body}`
+          );
+          alert('Copied. Open your mail app and paste into a new message.');
+          return;
+        } catch (e) {
+          // fall through to mailto
+        }
+      }
+    }
     window.location.href = url;
   });
 
@@ -4364,7 +4403,13 @@ const MEDTRONIC_PAR = [
         : Promise.resolve(null);
 
       const res = await fetch(url, { headers: { 'Teamup-Token': cfg.teamupApiToken } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        // Surface specific status hints so the user knows what to do
+        if (res.status === 401 || res.status === 403) throw new Error(`Teamup API token rejected (${res.status}). Update teamupApiToken in ADMIN_CONFIG.`);
+        if (res.status === 429) throw new Error('Teamup is rate-limiting requests (429). Wait a minute and refresh.');
+        if (res.status >= 500) throw new Error(`Teamup is having a problem (HTTP ${res.status}). Try refreshing in a minute.`);
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
       const hidden = new Set((cfg.hiddenEventTitles || []).map(s => s.toLowerCase().trim()));
       state.events = (data.events || [])
@@ -4521,11 +4566,18 @@ const MEDTRONIC_PAR = [
     return `${m}/${day} ${h}:${min} ${am}`;
   }
 
+  // Known author names — longest-first so "Ana Maria" matches before "Ana"
+  const KNOWN_NOTE_AUTHORS = ['Ana Maria', 'Josh', 'Bert', 'Ana', 'Latisha'];
+
   function parseNotesThread(notesText) {
     // Notes can be HTML or plain text from Teamup. Strip basic HTML tags
-    // and parse `[timestamp Name] message` lines into entries.
+    // (only when there's actually HTML present, so user-typed `<` doesn't get
+    // eaten as the start of a tag) and parse `[timestamp Name] message`.
     if (!notesText) return [];
-    const plain = String(notesText).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    let plain = String(notesText);
+    if (/<\/?[a-z][^>]*>/i.test(plain) || /&\w+;/.test(plain)) {
+      plain = plain.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    }
     const lines = plain.split(/\r?\n/);
     const entries = [];
     let buffer = null;
@@ -4533,15 +4585,23 @@ const MEDTRONIC_PAR = [
       const m = line.match(/^\s*\[([^\]]+)\]\s*(.*)$/);
       if (m) {
         if (buffer) entries.push(buffer);
-        // Header is "<timestamp> <Name>" — split at last space chunk before name word
-        // e.g. "5/9 2:30 PM Josh"
         const header = m[1].trim();
-        const tokens = header.split(/\s+/);
-        const author = tokens[tokens.length - 1];
-        const ts = tokens.slice(0, -1).join(' ');
+        // Match the longest known author at the end of the header, fall back
+        // to last word — so "5/9 2:30 PM Ana Maria" parses author "Ana Maria"
+        // not "Maria".
+        let author = '';
+        let ts = header;
+        const matched = KNOWN_NOTE_AUTHORS.find(a => header.endsWith(' ' + a) || header === a);
+        if (matched) {
+          author = matched;
+          ts = header.slice(0, header.length - matched.length).trim();
+        } else {
+          const tokens = header.split(/\s+/);
+          author = tokens[tokens.length - 1];
+          ts = tokens.slice(0, -1).join(' ');
+        }
         buffer = { author, ts, text: m[2] };
       } else if (buffer) {
-        // Continuation line
         if (line.trim()) buffer.text += '\n' + line;
       }
     });
@@ -5209,21 +5269,43 @@ const MEDTRONIC_PAR = [
       </div>
     `;
   }
-  function meriResetSpecimens(rows) {
-    rows = rows && rows.length ? rows : [{ type: '', qty: '', reqs: '' }];
-    meriSpecimensEl.innerHTML = rows.map((r, i) => meriRenderSpecimenRow(i, r.type, r.qty, r.reqs)).join('');
+  // The MERI form template only has 3 specimen slots — anything past 3
+  // would be silently dropped on PDF export, so cap the UI at 3.
+  const MERI_SPEC_MAX = 3;
+  function meriUpdateAddBtnState() {
+    if (!meriAddSpec) return;
+    const n = meriSpecimensEl.querySelectorAll('.meri-spec-row').length;
+    const atCap = n >= MERI_SPEC_MAX;
+    meriAddSpec.disabled = atCap;
+    meriAddSpec.style.opacity = atCap ? '0.4' : '1';
+    meriAddSpec.style.cursor = atCap ? 'not-allowed' : 'pointer';
+    meriAddSpec.textContent = atCap
+      ? `Maximum ${MERI_SPEC_MAX} specimen lines (MERI form limit)`
+      : `+ Add specimen line  (${n}/${MERI_SPEC_MAX})`;
+  }
+  function meriWireRemoveButtons() {
     meriSpecimensEl.querySelectorAll('.meri-spec-remove').forEach(btn => {
-      btn.addEventListener('click', () => {
+      // Replace listener so re-render doesn't stack handlers
+      btn.onclick = () => {
         if (meriSpecimensEl.querySelectorAll('.meri-spec-row').length <= 1) return;
         btn.closest('.meri-spec-row').remove();
-      });
+        meriUpdateAddBtnState();
+      };
     });
+  }
+  function meriResetSpecimens(rows) {
+    rows = rows && rows.length ? rows : [{ type: '', qty: '', reqs: '' }];
+    rows = rows.slice(0, MERI_SPEC_MAX);
+    meriSpecimensEl.innerHTML = rows.map((r, i) => meriRenderSpecimenRow(i, r.type, r.qty, r.reqs)).join('');
+    meriWireRemoveButtons();
+    meriUpdateAddBtnState();
   }
   meriAddSpec && meriAddSpec.addEventListener('click', () => {
     const next = meriSpecimensEl.querySelectorAll('.meri-spec-row').length;
+    if (next >= MERI_SPEC_MAX) return;
     meriSpecimensEl.insertAdjacentHTML('beforeend', meriRenderSpecimenRow(next, '', '', ''));
-    const newRow = meriSpecimensEl.lastElementChild;
-    newRow.querySelector('.meri-spec-remove').addEventListener('click', () => newRow.remove());
+    meriWireRemoveButtons();
+    meriUpdateAddBtnState();
   });
 
   function fmtMeriDate(yyyy_mm_dd) {
@@ -5299,15 +5381,31 @@ const MEDTRONIC_PAR = [
       meriStatus.textContent = '⚠ pdf-lib not loaded — refresh the page and try again.';
       return;
     }
+
+    // Collect + validate specimen rows
+    const specs = Array.from(meriSpecimensEl.querySelectorAll('.meri-spec-row')).map(row => ({
+      type: row.querySelector('.meri-spec-type').value.trim(),
+      qty:  row.querySelector('.meri-spec-qty').value.trim(),
+      reqs: row.querySelector('.meri-spec-reqs').value.trim(),
+    })).filter(s => s.type || s.qty);
+
+    // Validation — surface problems before the user sends a half-empty PDF
+    const errors = [];
+    if (!meriLabDate.value)   errors.push('Lab date is required');
+    if (!meriProcedure.value.trim()) errors.push('Procedure description is required');
+    if (!specs.length)        errors.push('Add at least one specimen line');
+    specs.forEach((s, i) => {
+      if (!s.type) errors.push(`Specimen #${i + 1}: type/description is required`);
+      if (s.qty && (Number(s.qty) <= 0 || isNaN(Number(s.qty)))) errors.push(`Specimen #${i + 1}: qty must be a positive number`);
+    });
+    if (errors.length) {
+      meriStatus.innerHTML = '⚠ ' + errors.map(e => escapeHtml(e)).join('<br>');
+      return;
+    }
+
     meriStatus.textContent = 'Filling form…';
     meriGenerate.disabled = true;
     try {
-      // Collect current specimen rows
-      const specs = Array.from(meriSpecimensEl.querySelectorAll('.meri-spec-row')).map(row => ({
-        type: row.querySelector('.meri-spec-type').value.trim(),
-        qty:  row.querySelector('.meri-spec-qty').value.trim(),
-        reqs: row.querySelector('.meri-spec-reqs').value.trim(),
-      })).filter(s => s.type || s.qty);
 
       const { PDFDocument } = PDFLib;
       // cache-buster on every fetch — GitHub Pages serves the PDF with a
