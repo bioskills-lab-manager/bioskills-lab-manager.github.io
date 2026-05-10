@@ -5589,6 +5589,21 @@ const MEDTRONIC_PAR = [
       })();
       set('Date80_af_date', todayStr);
 
+      // After every setText, the field's appearance was regenerated using
+      // its stored Default Appearance (which may still encode auto-size /
+      // font size 0). Force every text field to a fixed 10pt and embed
+      // Helvetica so the long description fields (Text58, Text66, Text73)
+      // don't render giant when they only hold a short value.
+      try {
+        const helv = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+        form.getFields().forEach(f => {
+          if (f && typeof f.setText === 'function') {
+            try { f.setFontSize(10); } catch (_) {}
+          }
+        });
+        form.updateFieldAppearances(helv);
+      } catch (_) {}
+
       // Save & download
       const filledBytes = await pdfDoc.save();
       const blob = new Blob([filledBytes], { type: 'application/pdf' });
