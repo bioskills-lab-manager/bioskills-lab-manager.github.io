@@ -945,12 +945,12 @@ function getCurrentRoleKey() {
 const CURRENT_ROLE_KEY = getCurrentRoleKey();
 const CURRENT_ROLE = ROLES[CURRENT_ROLE_KEY];
 
-// Read view from URL (?view=team) — default to day. Team Status only
-// makes sense when more than one person's tasks are visible (i.e. master).
+// Read view from URL (?view=team or ?view=calendar) — default to day.
+// Team Status is master-only. Calendar is available to everyone.
 function getCurrentView() {
   const p = new URLSearchParams(window.location.search).get('view') || 'day';
   if (p === 'team' && CURRENT_ROLE_KEY !== 'master') return 'day';
-  return ['day', 'team'].includes(p) ? p : 'day';
+  return ['day', 'team', 'calendar'].includes(p) ? p : 'day';
 }
 const CURRENT_VIEW = getCurrentView();
 
@@ -1817,10 +1817,11 @@ const MEDTRONIC_PAR = [
     <div class="bar-track"><div class="bar-fill" id="progress-bar"></div></div>
   </div>
   <div class="actions">
-    <!-- View switcher (master only) -->
+    <!-- View switcher -->
     <div class="view-switcher" id="view-switcher" style="display:none;background:#fff;border:1.5px solid #d0d8e8;border-radius:8px;padding:3px;display:none;gap:0;">
-      <a class="view-tab" id="view-tab-day"  href="#" data-view="day"  style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📅 Day-by-day</a>
-      <a class="view-tab" id="view-tab-team" href="#" data-view="team" style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">👥 Team Status</a>
+      <a class="view-tab" id="view-tab-day"      href="#" data-view="day"      style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📋 Day-by-day</a>
+      <a class="view-tab" id="view-tab-calendar" href="#" data-view="calendar" style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">📅 Calendar</a>
+      <a class="view-tab" id="view-tab-team"     href="#" data-view="team"     style="padding:5px 12px;border-radius:6px;font-size:0.83rem;font-weight:600;text-decoration:none;color:#555;">👥 Team Status</a>
     </div>
     <div class="filter-chips" id="filter-chips">
       <div class="chip active" data-filter="all">All days</div>
@@ -2801,6 +2802,10 @@ const MEDTRONIC_PAR = [
 
     if (CURRENT_VIEW === 'team') {
       renderTeamStatus();
+      return;
+    }
+    if (CURRENT_VIEW === 'calendar') {
+      renderCalendarView();
       return;
     }
     if (CURRENT_ROLE_KEY === 'latisha') {
@@ -3981,6 +3986,137 @@ const MEDTRONIC_PAR = [
     });
   }
 
+  // ── Calendar Grid View ───────────────────────────────────────────
+  // Month-style 5-week grid starting from current week. Each event renders
+  // as a colored chip in its day cell. Click any chip → event detail modal.
+  function renderCalendarView() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayKey = ymd(today);
+
+    // Start from the SUNDAY of this week
+    const start = new Date(today);
+    start.setDate(today.getDate() - today.getDay());
+    // 6 weeks = 42 cells
+    const numWeeks = 6;
+    const cells = [];
+    for (let i = 0; i < numWeeks * 7; i++) {
+      const d = addDays(start, i);
+      cells.push({ date: d, key: ymd(d), events: [] });
+    }
+    const cellByKey = Object.fromEntries(cells.map(c => [c.key, c]));
+
+    // Filter events visible to this role (uses isEventVisibleForRole)
+    state.events.forEach(evt => {
+      if (!isEventVisibleForRole(evt)) return;
+      // For Bert: include Jax events + events where he's tagged in Who
+      if (CURRENT_ROLE_KEY === 'bert') {
+        const isJax = evt.subcalendar_id === ADMIN_CONFIG.jacksonvilleSubcalId;
+        const tagged = (evt.who || '').toLowerCase().includes('bert');
+        if (!isJax && !tagged) return;
+      }
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      const endKey   = (evt.end_dt   || evt.start_dt || '').slice(0, 10);
+      // Place event on each day it spans (inclusive)
+      const sd = parseYMD(startKey);
+      const ed = parseYMD(endKey);
+      const span = Math.max(0, Math.round((ed - sd) / 86400000));
+      for (let i = 0; i <= span; i++) {
+        const k = ymd(addDays(sd, i));
+        if (cellByKey[k]) cellByKey[k].events.push(evt);
+      }
+    });
+
+    // Color map (re-uses the type- color scheme)
+    const catColor = (cat) => ({
+      lab:              '#003da5',
+      training:         '#6a1b9a',
+      rd:               '#2e7d32',
+      specimenDelivery: '#c2185b',
+      specimenPickup:   '#c2185b',
+      cleanup:          '#00838f',
+      install:          '#558b2f',
+      meeting:          '#5d4037',
+      remote:           '#90a4ae',
+      hold:             '#9e9e9e',
+      closed:           '#bdbdbd',
+      other:            '#90a4ae',
+    })[cat] || '#90a4ae';
+
+    // Calendar header
+    const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 30).getMonth()]} ${addDays(today, 30).getDate()}`;
+    const dayLabels = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+    let html = `
+      <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:18px 24px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
+        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Calendar</div>
+        <div style="font-size:1.25rem;font-weight:700;">${escapeHtml(monthLabel)}</div>
+        <div style="font-size:0.85rem;color:rgba(255,255,255,0.85);margin-top:2px;">Click any event chip to open its full detail page.</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
+          ${dayLabels.map(d => `<div style="font-size:0.7rem;font-weight:700;letter-spacing:0.6px;color:#888;text-align:center;padding:4px 0;">${d}</div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
+    `;
+
+    // Cells
+    cells.forEach(c => {
+      const isToday = c.key === todayKey;
+      const isPast = c.key < todayKey;
+      const isOtherMonth = c.date.getMonth() !== today.getMonth() && Math.abs(c.date - today) > 7 * 86400000;
+      const cellBg = isToday ? '#e3f2fd' : (isPast ? '#fafafa' : '#fff');
+      const cellBorder = isToday ? '2px solid #003da5' : '1px solid #eef1f6';
+      const dayNumColor = isToday ? '#003da5' : (isPast ? '#aaa' : '#1a1a2e');
+      const chips = c.events.slice(0, 3).map(evt => {
+        const cat = classifyEvent(evt);
+        const color = catColor(cat);
+        const titleAttr = (evt.title || '') + (evt.who ? ` · 👤 ${evt.who}` : '');
+        return `
+          <div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}"
+               title="${escapeHtml(titleAttr)}"
+               style="font-size:0.68rem;padding:2px 5px;border-radius:3px;background:${color};color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">
+            ${escapeHtml((evt.title || '(untitled)').slice(0, 30))}
+          </div>
+        `;
+      }).join('');
+      const moreCount = c.events.length - 3;
+      const moreHtml = moreCount > 0 ? `<div style="font-size:0.65rem;color:#888;margin-top:1px;">+${moreCount} more</div>` : '';
+
+      html += `
+        <div style="min-height:90px;background:${cellBg};border:${cellBorder};border-radius:6px;padding:5px 7px;display:flex;flex-direction:column;gap:2px;${isPast || isOtherMonth ? 'opacity:0.85;' : ''}">
+          <div style="font-size:0.78rem;font-weight:700;color:${dayNumColor};">${c.date.getDate()}</div>
+          ${chips}
+          ${moreHtml}
+        </div>
+      `;
+    });
+
+    html += `</div></div>`;
+
+    // Legend
+    html += `
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;font-size:0.75rem;color:#666;">
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#003da5;"></span>Lab Session</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#6a1b9a;"></span>Training</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#2e7d32;"></span>R&D</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#c2185b;"></span>Specimen</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#00838f;"></span>Cleanup</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#90a4ae;"></span>Other</span>
+      </div>
+    `;
+
+    dashEl.innerHTML = html;
+
+    // Wire chip clicks
+    dashEl.querySelectorAll('.cal-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const evt = state.events.find(ev => String(ev.id) === String(chip.getAttribute('data-event-id')));
+        if (evt) openEventDetailModal(evt);
+      });
+    });
+  }
+
   // ── Fetch from Teamup ──────────────────────────────────────────────
   async function fetchEvents() {
     const today = new Date();
@@ -4677,9 +4813,11 @@ const MEDTRONIC_PAR = [
     // Hide share-links button outside master view
     const shareBtn = document.getElementById('btn-share-links');
     if (shareBtn) shareBtn.style.display = CURRENT_ROLE_KEY === 'master' ? '' : 'none';
-    // View switcher only on master
+    // View switcher — visible to everyone. Team Status tab is master-only.
     const viewSwitch = document.getElementById('view-switcher');
-    if (viewSwitch) viewSwitch.style.display = (CURRENT_ROLE_KEY === 'master') ? 'inline-flex' : 'none';
+    if (viewSwitch) viewSwitch.style.display = 'inline-flex';
+    const teamTab = document.getElementById('view-tab-team');
+    if (teamTab) teamTab.style.display = (CURRENT_ROLE_KEY === 'master') ? '' : 'none';
     // Team-links bar only on master
     const teamLinksBar = document.getElementById('team-links-bar');
     if (teamLinksBar) teamLinksBar.style.display = (CURRENT_ROLE_KEY === 'master') ? 'block' : 'none';
