@@ -2747,10 +2747,15 @@ const MEDTRONIC_PAR = [
     // glanceable list of events they're tagged on, before the prep-task days.
     let upcomingHero = '';
     if (CURRENT_ROLE_KEY === 'bert') {
-      upcomingHero = buildUpcomingEventsHeroHtml('bert', '0,131,143', {
+      // Bert sees ALL upcoming Jax lab events — he's responsible for cadaver
+      // prep, scanning, instrument setup regardless of who runs the lab.
+      // The "Who" badge on each card tells him who's covering that day.
+      upcomingHero = buildUpcomingEventsHeroHtml('', '0,131,143', {
         accentHex: '#00838f', accentHexEnd: '#00acc1', accentLight: '#e0f7fa',
-        eyebrow: 'Your upcoming events',
-        emptyTitle: 'No events scheduled with your name yet',
+        eyebrow: 'Upcoming Jax Lab events',
+        subtitle: 'You’re responsible for cadaver prep, scanning, and instrument setup on all of these. The Who badge shows who’s covering each event.',
+        emptyTitle: 'No upcoming events',
+        emptyMessage: 'There are no Jacksonville Lab events scheduled in the next 30 days.',
       });
     } else if (CURRENT_ROLE_KEY === 'anamaria') {
       upcomingHero = buildUpcomingEventsHeroHtml('ana', '194,24,91', {
