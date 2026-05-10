@@ -2758,7 +2758,7 @@ const MEDTRONIC_PAR = [
       upcomingHero = buildUpcomingEventsHeroHtml('', '0,131,143', {
         accentHex: '#00838f', accentHexEnd: '#00acc1', accentLight: '#e0f7fa',
         eyebrow: 'Upcoming Jax Lab events',
-        subtitle: 'You’re responsible for cadaver prep, scanning, and instrument setup on all of these. The Who badge shows who’s covering each event.',
+        subtitle: '',
         emptyTitle: 'No upcoming events',
         emptyMessage: 'There are no Jacksonville Lab events scheduled in the next 30 days.',
       });
@@ -3740,11 +3740,15 @@ const MEDTRONIC_PAR = [
     const accentHexEnd = options.accentHexEnd || '#8e24aa';
     const accentLight = options.accentLight || '#f3e5f5';
 
+    // Subtitle: undefined → default copy; empty string → no subtitle div at all.
+    const subtitle = options.subtitle === undefined
+      ? 'Each card shows the date, location, and the cost center to charge for that day.'
+      : options.subtitle;
     const heroHtml = `
       <div style="background:linear-gradient(135deg,${accentHex} 0%,${accentHexEnd} 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:18px;box-shadow:0 4px 18px rgba(${accent},0.18);">
         <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">${escapeHtml(options.eyebrow || 'Upcoming events')}</div>
-        <div style="font-size:1.5rem;font-weight:700;margin-bottom:6px;">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
-        <div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(options.subtitle || 'Each card shows the date, location, and the cost center to charge for that day.')}</div>
+        <div style="font-size:1.5rem;font-weight:700;${subtitle ? 'margin-bottom:6px;' : ''}">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
+        ${subtitle ? `<div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(subtitle)}</div>` : ''}
       </div>
     `;
 
