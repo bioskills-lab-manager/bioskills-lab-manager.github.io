@@ -4227,21 +4227,29 @@ const MEDTRONIC_PAR = [
     const todayObj = state.days[0];
     const calendarHtml = buildCalendarGridHtml({ compact: true });
 
-    // Use the same renderDay() output for the right column. Drop the
-    // outer day-card wrapper in favor of a clean section header.
+    // Make sure rolled-over starts visible on home view (a key way to
+    // surface missed prep when today's calendar is empty)
+    try { localStorage.removeItem(ADMIN_CONFIG.storageNamespace + '.rollover.collapsed'); } catch (e) {}
+
     const todayCardHtml = todayObj ? renderDay(todayObj) : '<div class="empty-state-text">Nothing scheduled today.</div>';
 
+    // Today's date label
+    const today = new Date();
+    const todayLabel = `${DOW_FULL[today.getDay()]}, ${MONTHS_SHORT[today.getMonth()]} ${today.getDate()}`;
+
     dashEl.innerHTML = `
-      <div class="home-grid" style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:flex-start;">
-        <div>${calendarHtml}</div>
+      <div class="home-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:flex-start;">
         <div>
-          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">Today's to-do</div>
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">📅 Calendar</div>
+          ${calendarHtml}
+        </div>
+        <div>
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#888;margin-bottom:8px;">📋 ${escapeHtml(todayLabel)}</div>
           ${todayCardHtml}
         </div>
       </div>
     `;
     wireCalendarChipClicks();
-    // Wire all the same controls renderAll wires for day cards
     wireDayViewControls();
   }
 
@@ -4980,13 +4988,11 @@ const MEDTRONIC_PAR = [
         window.location.href = buildUrl(CURRENT_ROLE_KEY, v);
       });
     });
-    // In Team Status view, the "All days / Days with tasks / Incomplete only"
-    // filter chips don't apply — hide them.
+    // Filter chips and Collapse-all only apply to Day-by-day view.
     const filterChipsEl = document.getElementById('filter-chips');
-    if (filterChipsEl) filterChipsEl.style.display = (CURRENT_VIEW === 'team') ? 'none' : 'flex';
-    // Same for collapse-all
+    if (filterChipsEl) filterChipsEl.style.display = (CURRENT_VIEW === 'day') ? 'flex' : 'none';
     const collapseBtnEl = document.getElementById('btn-collapse');
-    if (collapseBtnEl) collapseBtnEl.style.display = (CURRENT_VIEW === 'team') ? 'none' : '';
+    if (collapseBtnEl) collapseBtnEl.style.display = (CURRENT_VIEW === 'day') ? '' : 'none';
 
     // Personal greeting per role
     const titleEl = document.querySelector('header .title-block h1');
