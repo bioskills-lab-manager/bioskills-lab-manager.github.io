@@ -5301,6 +5301,19 @@ const MEDTRONIC_PAR = [
       const pdfDoc = await PDFDocument.load(blankBytes);
       const form   = pdfDoc.getForm();
 
+      // Wipe every text field on the template so leftover prefill from prior
+      // fills (Providence lab, Amanda Smith, old Cephalus row, etc.) doesn't
+      // leak through any field we don't explicitly write to.
+      try {
+        form.getFields().forEach(f => {
+          try {
+            if (f.constructor && f.constructor.name === 'PDFTextField') {
+              f.setText('');
+            }
+          } catch (_) {}
+        });
+      } catch (_) {}
+
       const set = (name, value) => {
         try {
           const f = form.getTextField(name);
@@ -5315,9 +5328,8 @@ const MEDTRONIC_PAR = [
       set('Text16', 'ENT Medical Education');
       set('Text19', 'josh.register@medtronic.com');
       set('Text22', 'On File');
-      // MERI rep block
-      set('Text34', 'Amanda Smith');
-      set('Text35', '978-886-8268');
+      // MERI rep block — left blank for Ana to fill in (was hardcoded Amanda
+      // Smith from the template; no MERI rep contact confirmed yet)
 
       // Lab location (default Jax — Ana can override per order)
       set('Text36', meriLabName.value);
