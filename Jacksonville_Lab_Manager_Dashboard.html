@@ -5294,7 +5294,10 @@ const MEDTRONIC_PAR = [
       })).filter(s => s.type || s.qty);
 
       const { PDFDocument } = PDFLib;
-      const blankBytes = await fetch('meri-form-template.pdf').then(r => {
+      // cache-buster on every fetch — GitHub Pages serves the PDF with a
+      // 10-minute max-age, which means a stale template can hang around
+      // even after a hard refresh of the HTML.
+      const blankBytes = await fetch('meri-form-template.pdf?v=' + Date.now(), { cache: 'no-store' }).then(r => {
         if (!r.ok) throw new Error('Could not load meri-form-template.pdf');
         return r.arrayBuffer();
       });
