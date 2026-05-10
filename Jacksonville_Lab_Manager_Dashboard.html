@@ -1516,7 +1516,6 @@ function buildDefaultList(pnQtyPairs) {
 const RESTOCK_CATALOG = {
   // Full lab session — typical consumables for a cadaver lab
   lab: buildDefaultList([
-    ["1895522T", 2],   // M4/M5 irrigation tubing for blades and burs
     ["1884380EM", 2],  // 4.3 mm Quadcut EM blade
     ["1883480EM", 2],  // 3.4 mm Quadcut EM blade
     ["1884006EM", 1],  // RAD 40 curved EM
@@ -1533,14 +1532,12 @@ const RESTOCK_CATALOG = {
 
   // Training / Hold (no cadaver) — minimal restock
   training: buildDefaultList([
-    ["1895522T", 1],
     ["1883480EM", 1],
     ["1884380EM", 1],
   ]),
 
   // R&D / video recording / scans / demos
   rd: buildDefaultList([
-    ["1895522T", 1],
     ["1884380EM", 1],
     ["1883080EM", 1],
     ["1884070RTD", 1],
