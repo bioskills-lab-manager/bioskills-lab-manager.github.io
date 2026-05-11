@@ -943,12 +943,12 @@ const ROLES = {
   },
   latisha: {
     name:               "Latisha",
-    label:              "Contractor — Assigned Events",
+    label:              "Contractor — Your Schedule",
     color:              "#6a1b9a",
     taskRoleFilter:     "latisha",      // tasks tagged roles:["latisha"] show for her
     eventFilterKey:     "latisha",      // only events whose title contains "latisha"
-    showDailyOps:       false,
-    showParCheck:       false,
+    showDailyOps:       true,           // contractors see a focused daily checklist
+    showParCheck:       false,          // par checks stay with Bert/Ana
     showCadaverLog:     false,
     showRestockEmail:   false,
   },
@@ -1517,9 +1517,7 @@ const RESTOCK_CATALOG = {
   // Full lab session — typical consumables for a cadaver lab
   lab: buildDefaultList([
     ["1884380EM", 2],  // 4.3 mm Quadcut EM blade
-    ["1883480EM", 2],  // 3.4 mm Quadcut EM blade
     ["1884006EM", 1],  // RAD 40 curved EM
-    ["1884012EM", 1],  // RAD 12 curved EM
     ["1883040BLD", 2], // 30K bullet diamond bur 3.0 mm 40°
     ["1883070BLC", 2], // 30K bullet cutting bur 3.0 mm 70°
     ["1884070RTC", 1], // 30K reverse tapered cutting bur 4.0 mm 70°
@@ -1532,7 +1530,6 @@ const RESTOCK_CATALOG = {
 
   // Training / Hold (no cadaver) — minimal restock
   training: buildDefaultList([
-    ["1883480EM", 1],
     ["1884380EM", 1],
   ]),
 
@@ -1727,20 +1724,24 @@ function detectSurgeonFromTitle(title) {
 //   action:   string          → renders an inline button that triggers a modal
 //                               'labSupplyPar'  → Lab supply par-check (non-Medtronic, emails Ana Maria)
 //                               'medtronicPar'  → Medtronic product par-check (opens restock email)
+// DAILY_OPS — daily lab housekeeping. Each item has an optional `roles`
+// array; items with no `roles` are universal. Contractors (Latisha + future
+// contractors) see only items tagged for them — cleaning, setup, walk-
+// throughs — not par checks or inventory which Bert/Ana own.
 const DAILY_OPS = [
-  { id: "biohazard", text: "Biohazard area organized", subTasks: [
+  { id: "biohazard", text: "Biohazard area organized", roles: ["bert", "latisha"], subTasks: [
     { id: "biohazard-trash-lid",     text: "Trash lid on every box" },
     { id: "biohazard-sharps",        text: "Sharps containers — fill level checked" },
     { id: "biohazard-fill-line",     text: "Nothing above the fill line" },
     { id: "biohazard-suction",       text: "Suction canisters discarded" },
     { id: "biohazard-used-product",  text: "All used product discarded" },
   ]},
-  { id: "scrubs", text: "Scrubs organized & restocked" },
-  { id: "ppe",    text: "PPE organized & restocked" },
-  { id: "lab-supply-check", text: "Lab supply par check (non-Medtronic)", action: "labSupplyPar" },
-  { id: "medtronic-check",  text: "Medtronic product par check & inventory",  action: "medtronicPar" },
-  { id: "review-tomorrow",  text: "Review tomorrow's schedule & confirm specimens / setup" },
-  { id: "lab-walkthrough",  text: "Walk-through lab safety & cleanliness check" },
+  { id: "scrubs",          text: "Scrubs organized & restocked",            roles: ["bert", "latisha"] },
+  { id: "ppe",             text: "PPE organized & restocked",                roles: ["bert", "latisha"] },
+  { id: "lab-supply-check",text: "Lab supply par check (non-Medtronic)",    action: "labSupplyPar", roles: ["bert"] },
+  { id: "medtronic-check", text: "Medtronic product par check & inventory", action: "medtronicPar", roles: ["bert"] },
+  { id: "review-tomorrow", text: "Review tomorrow's schedule & confirm specimens / setup", roles: ["bert"] },
+  { id: "lab-walkthrough", text: "Walk-through lab safety & cleanliness check", roles: ["bert", "latisha"] },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2498,7 +2499,12 @@ const MEDTRONIC_PAR = [
       if (!day.customTasks) day.customTasks = [];
       if (!CURRENT_ROLE.showDailyOps) return;
       if (isWeekend(day.dateObj) && day.events.length === 0) return;
+      // Contractors only see daily ops tagged for their role. Bert and Master
+      // see every item (no role filter). Latisha sees just cleaning + setup.
       DAILY_OPS.forEach(op => {
+        if (op.roles && op.roles.length && !CURRENT_ROLE.showAllTasks) {
+          if (!op.roles.includes(CURRENT_ROLE.taskRoleFilter)) return;
+        }
         const opEntry = {
           id: op.id,
           text: op.text,
@@ -3025,6 +3031,18 @@ const MEDTRONIC_PAR = [
         emptyTitle: 'No events scheduled with your name yet',
         collapsibleAfter: 3,
       });
+    } else if (CURRENT_ROLE_KEY === 'latisha') {
+      // Contractor schedule view — shows shifts coming up. Cost center is
+      // displayed on each card so she knows what to bill.
+      upcomingHero = buildUpcomingEventsHeroHtml('latisha', '106,27,154', {
+        accentHex: '#6a1b9a', accentHexEnd: '#8e24aa', accentLight: '#f3e5f5',
+        eyebrow: 'Your schedule',
+        subtitle: 'Days you\'re scheduled to come in. Each card shows the event, time, and the cost center to bill.',
+        emptyTitle: 'No shifts scheduled yet',
+        emptyMessage: 'When Josh adds your name to the "Who" field on a Teamup event, it will show up here automatically.',
+        showCostCenter: true,
+        collapsibleAfter: 3,
+      });
     }
 
     const visibleDays = state.days.filter(shouldShowDay);
@@ -3490,8 +3508,12 @@ const MEDTRONIC_PAR = [
     // can pick "3-Station Lab" etc. and get the per-station kit.
     const showVariantPicker = (category === 'lab' || category === 'inventory');
     if (showVariantPicker) {
-      const savedVariant = (evt.id && loadVariantPrefs()[evt.id]) || 'default';
-      const variant = LAB_VARIANTS[savedVariant] ? savedVariant : 'default';
+      // Default to 1-Station VIP Lab — most common configuration. User can
+      // pick a different variant from the dropdown; their choice is sticky
+      // per-event.
+      const fallbackVariant = 'vip1Station';
+      const savedVariant = (evt.id && loadVariantPrefs()[evt.id]) || fallbackVariant;
+      const variant = LAB_VARIANTS[savedVariant] ? savedVariant : fallbackVariant;
       restockState.variant = variant;
       restockState.items = LAB_VARIANTS[variant].items.map(p => ({ ...p, unit: p.unit || 'ea' }));
       variantSelect.value = variant;
