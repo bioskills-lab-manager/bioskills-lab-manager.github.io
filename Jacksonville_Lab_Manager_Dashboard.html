@@ -3579,6 +3579,26 @@ const MEDTRONIC_PAR = [
     alert(body);
   });
 
+  // Helper: open a mailto: URL reliably across browsers. On iOS / Android,
+  // window.location.href = mailtoUrl often silently fails (especially when
+  // triggered after an await) — synthesizing a click on a real <a href>
+  // element is what the OS treats as a legitimate user-initiated nav, so
+  // the Mail app actually launches.
+  function openMailtoLink(url) {
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => a.remove(), 100);
+    } catch (e) {
+      // Last-resort fallback
+      window.location.href = url;
+    }
+  }
+
   modalSend.addEventListener('click', async () => {
     const body = buildEmailBody();
     // Strip CRLF from subject — newlines in mailto subjects break the header
@@ -3592,8 +3612,8 @@ const MEDTRONIC_PAR = [
     if (url.length > 1900) {
       const ok = confirm(
         'This email is too long for some mail apps to open reliably (' +
-        url.length + ' chars). Click OK to copy the full email to your clipboard ' +
-        'and paste it into a fresh draft, or Cancel to try sending anyway.'
+        url.length + ' chars). Tap OK to copy the full email to your clipboard ' +
+        'and paste it into a fresh draft, or Cancel to try opening anyway.'
       );
       if (ok) {
         try {
@@ -3607,7 +3627,7 @@ const MEDTRONIC_PAR = [
         }
       }
     }
-    window.location.href = url;
+    openMailtoLink(url);
   });
 
   modalCopy.addEventListener('click', async () => {
@@ -5443,7 +5463,7 @@ const MEDTRONIC_PAR = [
 
     const subject = `Lab Supply Reorder Request — ${cc.fromLab} — ${dateStr}`;
     const url = `mailto:${encodeURIComponent(LAB_SUPPLY_CONTACT.email)}?cc=${encodeURIComponent(cc.contactEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = url;
+    openMailtoLink(url);
   }
 
   function orderMedtronicViaCS(below) {
