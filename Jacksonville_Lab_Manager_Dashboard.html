@@ -851,8 +851,6 @@
     }
 
     @media (max-width: 700px) {
-      /* Home view: stack calendar above today's to-do */
-      .home-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
       header { padding: 20px 16px 18px; }
       header .title-block h1 { font-size: 1.2rem; }
       .toolbar { padding: 0 14px; gap: 10px; }
@@ -2774,10 +2772,13 @@ const MEDTRONIC_PAR = [
       const eventDateLabel = isToday(eventD) ? 'today' : (group.eventDate === ymd(addDays(new Date(), 1)) ? 'tomorrow' : MONTHS_SHORT[eventD.getMonth()] + ' ' + eventD.getDate());
 
       // Show "Generate order/restock email" button on the event-day card,
-      // for any category that has catalog entries OR a template (so manual
-      // adds via the picker still work even with empty defaults).
+      // for any category that has catalog entries OR an explicit per-category
+      // override. EMAIL_TEMPLATES is now a Proxy that always returns a body,
+      // so we can't use it for an existence check — whitelist categories
+      // where a CS email is meaningful instead.
+      const CATEGORIES_WITH_EMAIL = ['lab','training','rd','specimenDelivery','specimenPickup','install','cleanup','inventory'];
       const catalog = RESTOCK_CATALOG[group.category] || [];
-      const hasTemplate = !!EMAIL_TEMPLATES[group.category];
+      const hasTemplate = CATEGORIES_WITH_EMAIL.includes(group.category);
       const showRestockBtn = CURRENT_ROLE.showRestockEmail
                           && (catalog.length > 0 || hasTemplate)
                           && day.dateKey === group.eventDate;
@@ -3032,12 +3033,9 @@ const MEDTRONIC_PAR = [
         emptyTitle: 'No events scheduled with your name yet',
         collapsibleAfter: 3,
       });
-    } else if (CURRENT_ROLE_KEY === 'latisha' || CURRENT_ROLE_KEY === 'master') {
-      // Contractor schedule manager — only render for Latisha herself (or for
-      // Master so Josh can plan from his view). Bert sees his own hero.
-      if (CURRENT_ROLE_KEY === 'latisha') {
-        upcomingHero = buildLatishaScheduleHeroHtml();
-      }
+    } else if (CURRENT_ROLE_KEY === 'latisha') {
+      // Contractor schedule manager
+      upcomingHero = buildLatishaScheduleHeroHtml();
     }
 
     const visibleDays = state.days.filter(shouldShowDay);
@@ -4333,7 +4331,7 @@ const MEDTRONIC_PAR = [
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Your schedule · next 7 days</div>
-            <div style="font-size:1.35rem;font-weight:700;">
+            <div class="latisha-total-hours" style="font-size:1.35rem;font-weight:700;">
               ${workshops.length === 0 && sched.manual.length === 0
                 ? 'No shifts scheduled this week'
                 : `${(totalHours).toFixed(1)} hours scheduled`}
@@ -4480,6 +4478,45 @@ const MEDTRONIC_PAR = [
     return heroOpen + cardsHtml + heroClose;
   }
 
+  // Update the summary line on a single card (time range + hours pill) without
+  // a full re-render — keeps the card expanded and focus intact while editing.
+  function latishaUpdateCardSummary(card, startTime, endTime) {
+    if (!card) return;
+    const hrs = hoursBetween(startTime, endTime);
+    const timeRange = (startTime && endTime)
+      ? `${fmt12h(startTime)}–${fmt12h(endTime)}`
+      : '— tap to set times';
+    const hrsLabel = hrs > 0 ? ` · ${hrs.toFixed(1)} hr` : '';
+    // The time/hours span is the second-to-last span in .latisha-sched-summary
+    // (before the optional remove × and chev).
+    const summary = card.querySelector('.latisha-sched-summary');
+    if (!summary) return;
+    const spans = summary.querySelectorAll(':scope > span');
+    // Find the time-range span — it's the one with font-variant-numeric:tabular-nums
+    spans.forEach(s => {
+      if (s.style.fontVariantNumeric === 'tabular-nums' || s.style.cssText.includes('tabular-nums')) {
+        s.textContent = timeRange + hrsLabel;
+      }
+    });
+  }
+
+  // Recompute and rewrite the total-hours number in the gradient header
+  function latishaUpdateTotalHours() {
+    const sched = loadLatishaSchedule();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayKey = ymd(today);
+    const horizon = ymd(addDays(today, 7));
+    let total = 0;
+    // Walk current cards in DOM — keeps the calc in sync with what's visible
+    dashEl.querySelectorAll('.latisha-sched-card').forEach(card => {
+      const s = card.querySelector('.latisha-sched-start');
+      const e = card.querySelector('.latisha-sched-end');
+      total += hoursBetween(s ? s.value : '', e ? e.value : '');
+    });
+    const header = dashEl.querySelector('.latisha-total-hours');
+    if (header) header.textContent = `${total.toFixed(1)} hours scheduled`;
+  }
+
   function wireLatishaScheduleControls() {
     // Click summary row to toggle the edit panel
     dashEl.querySelectorAll('.latisha-sched-card').forEach(card => {
@@ -4524,11 +4561,10 @@ const MEDTRONIC_PAR = [
           }
         }
         saveLatishaSchedule(sched);
-        // Re-render hero so total hours updates
-        const newHero = buildLatishaScheduleHeroHtml();
-        const oldHero = dashEl;
-        // Cheapest path: full re-render (small dataset)
-        renderAll();
+        // In-place update — do NOT call renderAll() because that would
+        // collapse the card the user is editing and steal focus.
+        latishaUpdateCardSummary(card, startEl.value, endEl.value);
+        latishaUpdateTotalHours();
       };
       startEl.onchange = onSave;
       endEl.onchange   = onSave;
@@ -4573,30 +4609,8 @@ const MEDTRONIC_PAR = [
     renderAll();
   }
 
-  // Latisha: hero-only view (no day-by-day prep tasks since she's a contractor)
-  function renderLatishaView() {
-    dashEl.innerHTML = buildUpcomingEventsHeroHtml('latisha', '106,27,154', {
-      accentHex: '#6a1b9a',
-      accentHexEnd: '#8e24aa',
-      accentLight: '#f3e5f5',
-      showCostCenter: true,   // contractor — needs cost center to bill
-      collapsibleAfter: 3,
-    });
-    // Wire add-custom + open-event-detail buttons (rendered inside hero cards)
-    dashEl.querySelectorAll('.btn-add-custom').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation(); e.preventDefault();
-        openCustomTaskModal(btn.getAttribute('data-date'), btn.getAttribute('data-event-id') || null);
-      });
-    });
-    dashEl.querySelectorAll('.btn-event-detail').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation(); e.preventDefault();
-        const evt = state.events.find(ev => String(ev.id) === String(btn.getAttribute('data-event-id')));
-        if (evt) openEventDetailModal(evt);
-      });
-    });
-  }
+  // (renderLatishaView removed — Latisha now uses the same renderAll path
+  // as everyone else, with buildLatishaScheduleHeroHtml as her hero.)
 
   // ── Calendar Grid Renderer ──────────────────────────────────────
   // buildCalendarGridHtml() returns the calendar HTML; can be reused by
