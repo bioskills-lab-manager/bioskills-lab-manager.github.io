@@ -4269,7 +4269,9 @@ const MEDTRONIC_PAR = [
   function buildLatishaScheduleHeroHtml() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayKey = ymd(today);
-    const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
+    // Schedule manager shows only the next 7 days — keeps the top of the
+    // dashboard tight. Beyond that, the regular calendar/day view covers it.
+    const horizon = ymd(addDays(today, 7));
     const sched = loadLatishaSchedule();
 
     // Upcoming workshops where Latisha is tagged in "Who" or title.
@@ -4318,47 +4320,49 @@ const MEDTRONIC_PAR = [
       }
     });
 
-    const heroBanner = `
-      <div style="background:linear-gradient(135deg,#6a1b9a 0%,#8e24aa 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:14px;box-shadow:0 4px 18px rgba(106,27,154,0.18);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
-          <div style="flex:1;min-width:240px;">
-            <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">Your schedule</div>
-            <div style="font-size:1.5rem;font-weight:700;margin-bottom:4px;">
+    const heroOpen = `
+      <div style="background:linear-gradient(135deg,#6a1b9a 0%,#8e24aa 100%);color:#fff;border-radius:14px;padding:18px 22px;margin-bottom:14px;box-shadow:0 4px 18px rgba(106,27,154,0.18);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Your schedule · next 7 days</div>
+            <div style="font-size:1.35rem;font-weight:700;">
               ${workshops.length === 0 && sched.manual.length === 0
-                ? 'No shifts scheduled yet'
-                : `${(totalHours).toFixed(1)} hours scheduled · next ${ADMIN_CONFIG.daysAhead} days`}
+                ? 'No shifts scheduled this week'
+                : `${(totalHours).toFixed(1)} hours scheduled`}
             </div>
-            <div style="font-size:0.88rem;color:rgba(255,255,255,0.85);">
-              Adjust arrival/departure times below. Total updates automatically.
+            <div style="font-size:0.82rem;color:rgba(255,255,255,0.85);margin-top:2px;">
+              Tap any shift to adjust start/end times.
             </div>
           </div>
           <button type="button" id="latisha-add-hours-btn"
-                  style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:0.85rem;font-weight:700;padding:9px 16px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;">
-            + Add manual hours
+                  style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:0.82rem;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+            + Add hours
           </button>
         </div>
-      </div>
     `;
+    const heroClose = `</div>`;
 
     if (workshops.length === 0 && sched.manual.length === 0) {
-      return heroBanner + `
-        <div style="background:#fff;border-radius:12px;padding:40px 30px;text-align:center;color:#888;font-size:0.95rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);margin-bottom:18px;">
-          <div style="font-size:2.2rem;margin-bottom:10px;">📅</div>
-          <div style="font-weight:600;color:#1a1a2e;margin-bottom:6px;">No upcoming workshops</div>
-          <div>When Josh adds your name to a Teamup event, it shows up here. You can also use "+ Add manual hours" above for non-workshop time.</div>
+      return heroOpen + `
+        <div style="background:rgba(255,255,255,0.95);border-radius:10px;padding:24px 18px;text-align:center;color:#666;font-size:0.9rem;">
+          <div style="font-size:1.8rem;margin-bottom:6px;">📅</div>
+          <div style="font-weight:600;color:#1a1a2e;margin-bottom:4px;">No shifts in the next 7 days</div>
+          <div style="font-size:0.82rem;">When Josh tags you in a Teamup event for this week, it shows up here. Use "+ Add hours" for non-workshop time.</div>
         </div>
-      `;
+      ` + heroClose;
     }
 
     // Build combined list of workshop cards + manual hour entries, sorted by date
     const items = [];
-    // Default end time per workshop type — falls back to event's end_dt
-    // or blank if neither matches.
+    // Default end time per workshop type — Latisha's shifts are almost
+    // always 8 AM-3 PM (short day) or 8 AM-5 PM (RAF / long workshop).
+    // Default to short day unless title flags otherwise.
     function defaultEndForEvent(evt) {
       const t = (evt.title || '').toLowerCase();
-      if (/\bent\s*immersion\b/.test(t)) return '15:00';   // 3 PM
-      if (/\braf\b/.test(t))             return '17:00';   // 5 PM
-      return (evt.end_dt || '').slice(11, 16) || '';
+      if (/\braf\b/.test(t))                       return '17:00';  // 5 PM
+      if (/\bent\s*immersion\b/.test(t))           return '15:00';  // 3 PM
+      // Generic fallback — short day, can be overridden per shift
+      return '15:00';
     }
     workshops.forEach(w => {
       const evt = w.evt;
@@ -4396,53 +4400,81 @@ const MEDTRONIC_PAR = [
 
     const cardsHtml = items.map(item => {
       const d = parseYMD(item.date);
-      const dateLabel = `${DOW_FULL[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+      const isToday = item.date === todayKey;
+      const dateBadge = isToday
+        ? 'TODAY'
+        : `${DOW[d.getDay()]} · ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
       const hrs = hoursBetween(item.startTime, item.endTime);
-      const hrsLabel = hrs > 0 ? `${hrs.toFixed(1)} hr` : '— set times';
+      const timeRange = (item.startTime && item.endTime)
+        ? `${item.startTime}–${item.endTime}`
+        : '— tap to set times';
+      const hrsLabel = hrs > 0 ? `${hrs.toFixed(1)} hr` : '';
       const isManual = item.kind === 'manual';
       const dataAttrs = isManual
         ? `data-kind="manual" data-manual-id="${escapeHtml(item.manualId)}"`
         : `data-kind="workshop" data-event-id="${escapeHtml(String(item.eventId))}" data-day-key="${escapeHtml(item.dayKey)}"`;
       const titleText = isManual
-        ? '<span style="font-style:italic;color:#888;">Manual entry</span>'
+        ? '<span style="font-style:italic;opacity:0.7;">Manual entry</span>'
         : escapeHtml(item.evt.title || '(untitled)') + (item.multiDayLabel || '');
       const removeBtn = isManual
-        ? `<button type="button" class="latisha-sched-remove" ${dataAttrs} title="Remove this manual entry" style="background:none;border:none;color:#c1281a;cursor:pointer;font-size:1.1rem;padding:2px 6px;">×</button>`
+        ? `<button type="button" class="latisha-sched-remove" ${dataAttrs} title="Remove this manual entry"
+                  style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:1.1rem;padding:2px 6px;">×</button>`
         : '';
+      // Compact row — date + title + hours preview. Click expands the
+      // edit panel below. Today is highlighted.
       return `
         <div class="latisha-sched-card" ${dataAttrs}
-             style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid #6a1b9a;border-radius:10px;padding:14px 18px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#6a1b9a;margin-bottom:3px;">${escapeHtml(dateLabel)}</div>
-              <div style="font-size:1rem;font-weight:600;color:#1a1a2e;">${titleText}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="background:#f3e5f5;color:#6a1b9a;font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;white-space:nowrap;">${hrsLabel}</span>
-              ${removeBtn}
-            </div>
+             style="background:rgba(255,255,255,${isToday ? '0.18' : '0.10'});border:1px solid rgba(255,255,255,${isToday ? '0.45' : '0.18'});border-radius:10px;margin-bottom:8px;color:#fff;overflow:hidden;">
+          <div class="latisha-sched-summary"
+               style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none;">
+            <span style="background:${isToday ? '#fff' : 'rgba(255,255,255,0.2)'};color:${isToday ? '#6a1b9a' : '#fff'};font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:4px 9px;border-radius:5px;white-space:nowrap;">
+              ${escapeHtml(dateBadge)}
+            </span>
+            <span style="flex:1;min-width:0;font-size:0.92rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              ${titleText}
+            </span>
+            <span style="font-size:0.78rem;font-weight:600;opacity:0.95;white-space:nowrap;font-variant-numeric:tabular-nums;">
+              ${escapeHtml(timeRange)}${hrsLabel ? ` · ${hrsLabel}` : ''}
+            </span>
+            ${removeBtn}
+            <span class="latisha-sched-chev" style="opacity:0.7;font-size:0.85rem;transition:transform 0.15s ease;">▸</span>
           </div>
-          <div style="display:grid;grid-template-columns:auto auto 1fr;gap:10px 12px;align-items:center;">
-            <label style="font-size:0.72rem;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Start</label>
-            <input type="time" class="latisha-sched-start" value="${escapeHtml(item.startTime)}"
-                   style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:120px;" />
-            <span></span>
-            <label style="font-size:0.72rem;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">End</label>
-            <input type="time" class="latisha-sched-end" value="${escapeHtml(item.endTime)}"
-                   style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:120px;" />
-            <span></span>
-            <label style="font-size:0.72rem;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Notes</label>
+          <div class="latisha-sched-edit" style="display:none;padding:10px 14px 14px;background:rgba(255,255,255,0.96);color:#1a1a2e;border-top:1px solid rgba(255,255,255,0.4);">
+            <div style="display:grid;grid-template-columns:auto auto;gap:10px 14px;align-items:center;margin-bottom:8px;">
+              <label style="font-size:0.72rem;font-weight:700;color:#6a1b9a;text-transform:uppercase;letter-spacing:0.5px;">Start</label>
+              <input type="time" class="latisha-sched-start" value="${escapeHtml(item.startTime)}"
+                     style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:130px;" />
+              <label style="font-size:0.72rem;font-weight:700;color:#6a1b9a;text-transform:uppercase;letter-spacing:0.5px;">End</label>
+              <input type="time" class="latisha-sched-end" value="${escapeHtml(item.endTime)}"
+                     style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:130px;" />
+            </div>
+            <label style="display:block;font-size:0.72rem;font-weight:700;color:#6a1b9a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Notes</label>
             <input type="text" class="latisha-sched-notes" value="${escapeHtml(item.notes)}" placeholder="Optional notes for this shift"
-                   style="grid-column:span 2;border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.85rem;font-family:inherit;" />
+                   style="width:100%;border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.85rem;font-family:inherit;box-sizing:border-box;" />
           </div>
         </div>
       `;
     }).join('');
 
-    return heroBanner + cardsHtml;
+    return heroOpen + cardsHtml + heroClose;
   }
 
   function wireLatishaScheduleControls() {
+    // Click summary row to toggle the edit panel
+    dashEl.querySelectorAll('.latisha-sched-card').forEach(card => {
+      const summary = card.querySelector('.latisha-sched-summary');
+      const edit    = card.querySelector('.latisha-sched-edit');
+      const chev    = card.querySelector('.latisha-sched-chev');
+      if (summary && edit) {
+        summary.onclick = (e) => {
+          // Don't toggle when clicking the remove × button
+          if (e.target.closest('.latisha-sched-remove')) return;
+          const open = edit.style.display !== 'none';
+          edit.style.display = open ? 'none' : 'block';
+          if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+        };
+      }
+    });
     // Save on input change (debounced via .onchange)
     dashEl.querySelectorAll('.latisha-sched-card').forEach(card => {
       const kind = card.getAttribute('data-kind');
