@@ -3031,18 +3031,12 @@ const MEDTRONIC_PAR = [
         emptyTitle: 'No events scheduled with your name yet',
         collapsibleAfter: 3,
       });
-    } else if (CURRENT_ROLE_KEY === 'latisha') {
-      // Contractor schedule view — shows shifts coming up. Cost center is
-      // displayed on each card so she knows what to bill.
-      upcomingHero = buildUpcomingEventsHeroHtml('latisha', '106,27,154', {
-        accentHex: '#6a1b9a', accentHexEnd: '#8e24aa', accentLight: '#f3e5f5',
-        eyebrow: 'Your schedule',
-        subtitle: 'Days you\'re scheduled to come in. Each card shows the event, time, and the cost center to bill.',
-        emptyTitle: 'No shifts scheduled yet',
-        emptyMessage: 'When Josh adds your name to the "Who" field on a Teamup event, it will show up here automatically.',
-        showCostCenter: true,
-        collapsibleAfter: 3,
-      });
+    } else if (CURRENT_ROLE_KEY === 'latisha' || CURRENT_ROLE_KEY === 'master') {
+      // Contractor schedule manager — only render for Latisha herself (or for
+      // Master so Josh can plan from his view). Bert sees his own hero.
+      if (CURRENT_ROLE_KEY === 'latisha') {
+        upcomingHero = buildLatishaScheduleHeroHtml();
+      }
     }
 
     const visibleDays = state.days.filter(shouldShowDay);
@@ -3053,6 +3047,7 @@ const MEDTRONIC_PAR = [
 
     dashEl.innerHTML = upcomingHero + visibleDays.map(renderDay).join('');
     wireDayViewControls();
+    if (CURRENT_ROLE_KEY === 'latisha') wireLatishaScheduleControls();
   }
 
   // ── Day-view control wiring (extracted for reuse by renderAll + renderHomeView) ──
@@ -4211,6 +4206,254 @@ const MEDTRONIC_PAR = [
       cards = cardArray.join('');
     }
     return heroHtml + cards;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // Latisha (and future contractors): Schedule Manager
+  // Shows upcoming workshops with editable arrival/departure times, plus
+  // manual hours entries (for non-workshop work). Data is stored in
+  // localStorage under a SHARED key — Master/Bert can adjust her timing
+  // from their views and Latisha sees the update.
+  // ──────────────────────────────────────────────────────────────────
+  const LATISHA_SCHED_KEY = ADMIN_CONFIG.storageNamespace + '.latishaSchedule';
+  function loadLatishaSchedule() {
+    try {
+      const raw = localStorage.getItem(LATISHA_SCHED_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return {
+        events:    parsed.events    || {},  // { eventId: { startTime, endTime, notes } }
+        manual:    parsed.manual    || [],  // [{ id, date, startTime, endTime, notes }]
+      };
+    } catch (e) { return { events: {}, manual: [] }; }
+  }
+  function saveLatishaSchedule(s) {
+    try { localStorage.setItem(LATISHA_SCHED_KEY, JSON.stringify(s)); } catch (e) {}
+  }
+
+  // Compute total hours between two HH:MM strings (handles cross-midnight not needed)
+  function hoursBetween(start, end) {
+    if (!start || !end) return 0;
+    const [sH, sM] = start.split(':').map(Number);
+    const [eH, eM] = end.split(':').map(Number);
+    if (isNaN(sH) || isNaN(eH)) return 0;
+    const startMin = sH * 60 + (sM || 0);
+    const endMin = eH * 60 + (eM || 0);
+    if (endMin <= startMin) return 0;
+    return Math.round((endMin - startMin) / 6) / 10; // tenths of hours
+  }
+
+  function buildLatishaScheduleHeroHtml() {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayKey = ymd(today);
+    const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
+    const sched = loadLatishaSchedule();
+
+    // Upcoming workshops where Latisha is tagged in "Who" or title
+    const workshops = state.events.filter(evt => {
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      if (!startKey || startKey < todayKey || startKey > horizon) return false;
+      const who = (evt.who || '').toLowerCase();
+      const title = (evt.title || '').toLowerCase();
+      return who.includes('latisha') || title.includes('latisha');
+    }).sort((a, b) => (a.start_dt || '').localeCompare(b.start_dt || ''));
+
+    // Calculate total hours scheduled this period
+    let totalHours = 0;
+    workshops.forEach(evt => {
+      const s = sched.events[evt.id] || {};
+      totalHours += hoursBetween(s.startTime, s.endTime);
+    });
+    sched.manual.forEach(m => {
+      if (m.date >= todayKey && m.date <= horizon) {
+        totalHours += hoursBetween(m.startTime, m.endTime);
+      }
+    });
+
+    const heroBanner = `
+      <div style="background:linear-gradient(135deg,#6a1b9a 0%,#8e24aa 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:14px;box-shadow:0 4px 18px rgba(106,27,154,0.18);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:240px;">
+            <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">Your schedule</div>
+            <div style="font-size:1.5rem;font-weight:700;margin-bottom:4px;">
+              ${workshops.length === 0 && sched.manual.length === 0
+                ? 'No shifts scheduled yet'
+                : `${(totalHours).toFixed(1)} hours scheduled · next ${ADMIN_CONFIG.daysAhead} days`}
+            </div>
+            <div style="font-size:0.88rem;color:rgba(255,255,255,0.85);">
+              Adjust arrival/departure times below. Total updates automatically.
+            </div>
+          </div>
+          <button type="button" id="latisha-add-hours-btn"
+                  style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;font-size:0.85rem;font-weight:700;padding:9px 16px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+            + Add manual hours
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (workshops.length === 0 && sched.manual.length === 0) {
+      return heroBanner + `
+        <div style="background:#fff;border-radius:12px;padding:40px 30px;text-align:center;color:#888;font-size:0.95rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);margin-bottom:18px;">
+          <div style="font-size:2.2rem;margin-bottom:10px;">📅</div>
+          <div style="font-weight:600;color:#1a1a2e;margin-bottom:6px;">No upcoming workshops</div>
+          <div>When Josh adds your name to a Teamup event, it shows up here. You can also use "+ Add manual hours" above for non-workshop time.</div>
+        </div>
+      `;
+    }
+
+    // Build combined list of workshop cards + manual hour entries, sorted by date
+    const items = [];
+    workshops.forEach(evt => {
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      const s = sched.events[evt.id] || {};
+      const evtStartTime = (evt.start_dt || '').slice(11, 16);
+      const evtEndTime = (evt.end_dt || '').slice(11, 16);
+      items.push({
+        kind: 'workshop',
+        sortKey: startKey,
+        eventId: evt.id,
+        evt,
+        date: startKey,
+        startTime: s.startTime || evtStartTime || '',
+        endTime: s.endTime || evtEndTime || '',
+        notes: s.notes || '',
+      });
+    });
+    sched.manual.forEach(m => {
+      if (m.date < todayKey || m.date > horizon) return;
+      items.push({
+        kind: 'manual',
+        sortKey: m.date,
+        manualId: m.id,
+        date: m.date,
+        startTime: m.startTime || '',
+        endTime: m.endTime || '',
+        notes: m.notes || '',
+      });
+    });
+    items.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+    const cardsHtml = items.map(item => {
+      const d = parseYMD(item.date);
+      const dateLabel = `${DOW_FULL[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+      const hrs = hoursBetween(item.startTime, item.endTime);
+      const hrsLabel = hrs > 0 ? `${hrs.toFixed(1)} hr` : '— set times';
+      const isManual = item.kind === 'manual';
+      const dataAttrs = isManual
+        ? `data-kind="manual" data-manual-id="${escapeHtml(item.manualId)}"`
+        : `data-kind="workshop" data-event-id="${escapeHtml(String(item.eventId))}"`;
+      const titleText = isManual
+        ? '<span style="font-style:italic;color:#888;">Manual entry</span>'
+        : escapeHtml(item.evt.title || '(untitled)');
+      const removeBtn = isManual
+        ? `<button type="button" class="latisha-sched-remove" ${dataAttrs} title="Remove this manual entry" style="background:none;border:none;color:#c1281a;cursor:pointer;font-size:1.1rem;padding:2px 6px;">×</button>`
+        : '';
+      return `
+        <div class="latisha-sched-card" ${dataAttrs}
+             style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid #6a1b9a;border-radius:10px;padding:14px 18px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#6a1b9a;margin-bottom:3px;">${escapeHtml(dateLabel)}</div>
+              <div style="font-size:1rem;font-weight:600;color:#1a1a2e;">${titleText}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="background:#f3e5f5;color:#6a1b9a;font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:6px;white-space:nowrap;">${hrsLabel}</span>
+              ${removeBtn}
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:auto auto 1fr;gap:10px 12px;align-items:center;">
+            <label style="font-size:0.72rem;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Start</label>
+            <input type="time" class="latisha-sched-start" value="${escapeHtml(item.startTime)}"
+                   style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:120px;" />
+            <span></span>
+            <label style="font-size:0.72rem;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">End</label>
+            <input type="time" class="latisha-sched-end" value="${escapeHtml(item.endTime)}"
+                   style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:120px;" />
+            <span></span>
+            <label style="font-size:0.72rem;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Notes</label>
+            <input type="text" class="latisha-sched-notes" value="${escapeHtml(item.notes)}" placeholder="Optional notes for this shift"
+                   style="grid-column:span 2;border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.85rem;font-family:inherit;" />
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return heroBanner + cardsHtml;
+  }
+
+  function wireLatishaScheduleControls() {
+    // Save on input change (debounced via .onchange)
+    dashEl.querySelectorAll('.latisha-sched-card').forEach(card => {
+      const kind = card.getAttribute('data-kind');
+      const startEl = card.querySelector('.latisha-sched-start');
+      const endEl   = card.querySelector('.latisha-sched-end');
+      const notesEl = card.querySelector('.latisha-sched-notes');
+      const onSave = () => {
+        const sched = loadLatishaSchedule();
+        if (kind === 'workshop') {
+          const eventId = card.getAttribute('data-event-id');
+          sched.events[eventId] = {
+            startTime: startEl.value,
+            endTime:   endEl.value,
+            notes:     notesEl.value,
+          };
+        } else if (kind === 'manual') {
+          const manualId = card.getAttribute('data-manual-id');
+          const entry = sched.manual.find(m => m.id === manualId);
+          if (entry) {
+            entry.startTime = startEl.value;
+            entry.endTime   = endEl.value;
+            entry.notes     = notesEl.value;
+          }
+        }
+        saveLatishaSchedule(sched);
+        // Re-render hero so total hours updates
+        const newHero = buildLatishaScheduleHeroHtml();
+        const oldHero = dashEl;
+        // Cheapest path: full re-render (small dataset)
+        renderAll();
+      };
+      startEl.onchange = onSave;
+      endEl.onchange   = onSave;
+      notesEl.onchange = onSave;
+    });
+    // Remove manual entry
+    dashEl.querySelectorAll('.latisha-sched-remove').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (!confirm('Remove this manual hours entry?')) return;
+        const manualId = btn.getAttribute('data-manual-id');
+        const sched = loadLatishaSchedule();
+        sched.manual = sched.manual.filter(m => m.id !== manualId);
+        saveLatishaSchedule(sched);
+        renderAll();
+      };
+    });
+    // Add manual hours button
+    const addBtn = document.getElementById('latisha-add-hours-btn');
+    if (addBtn) addBtn.onclick = openAddManualHoursPrompt;
+  }
+
+  function openAddManualHoursPrompt() {
+    const today = ymd(new Date());
+    const date = prompt('Date (YYYY-MM-DD):', today);
+    if (!date) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      alert('Please use YYYY-MM-DD format (e.g. 2026-05-15).');
+      return;
+    }
+    const startTime = prompt('Start time (HH:MM, 24-hour):', '09:00');
+    if (!startTime) return;
+    const endTime = prompt('End time (HH:MM, 24-hour):', '15:00');
+    if (!endTime) return;
+    const notes = prompt('Notes (optional — e.g. extra cleaning, training):', '') || '';
+    const sched = loadLatishaSchedule();
+    sched.manual.push({
+      id: 'manual_' + Date.now(),
+      date, startTime, endTime, notes,
+    });
+    saveLatishaSchedule(sched);
+    renderAll();
   }
 
   // Latisha: hero-only view (no day-by-day prep tasks since she's a contractor)
