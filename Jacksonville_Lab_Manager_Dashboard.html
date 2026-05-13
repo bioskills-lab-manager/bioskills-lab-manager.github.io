@@ -4146,44 +4146,45 @@ const MEDTRONIC_PAR = [
     const cardArray = upcoming.map(evt => {
       const startKey = (evt.start_dt || '').slice(0, 10);
       const startD = parseYMD(startKey);
-      const cat = classifyEvent(evt);
-      const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
-      const subcalName = state.subcalMap[evt.subcalendar_id] || '';
-      const dsmName = detectDsmFromTitle(evt.title);
-      const dsm = dsmName ? dsmByName(dsmName) : dsmByName('Med Ed');
-
-      // Big date chip
-      const dow = DOW_FULL[startD.getDay()];
-      const monthAbbr = MONTHS_SHORT[startD.getMonth()].toUpperCase();
-      const dayNum = startD.getDate();
       const isToday = startKey === todayKey;
       const isTomorrow = startKey === ymd(addDays(today, 1));
-      const whenLabel = isToday ? 'TODAY' : isTomorrow ? 'TOMORROW' : dow.toUpperCase();
-      const daysAway = Math.round((startD - today) / 86400000);
-      const awayLabel = isToday ? '' : isTomorrow ? '' : `in ${daysAway} day${daysAway === 1 ? '' : 's'}`;
+      const monthAbbr = MONTHS_SHORT[startD.getMonth()];
+      const dayNum = startD.getDate();
+      const dow = DOW[startD.getDay()];
+      const dateBadge = isToday
+        ? 'TODAY'
+        : isTomorrow
+          ? 'TOMORROW'
+          : `${dow} · ${monthAbbr} ${dayNum}`;
 
+      // Compact preview row — title + date badge + chevron. Click opens the
+      // event detail modal for the full info (who, cost center, prep tasks,
+      // notes thread, restock button, etc.).
       return `
-        <div style="background:#fff;border-radius:14px;padding:0;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden;display:flex;${isToday ? 'border:2px solid ' + accentHex + ';' : ''}">
-          <div style="background:${isToday ? accentHex : accentLight};color:${isToday ? '#fff' : accentHex};padding:18px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px;">
-            <div style="font-size:0.7rem;font-weight:700;letter-spacing:1.2px;">${escapeHtml(whenLabel)}</div>
-            <div style="font-size:2.2rem;font-weight:700;line-height:1;margin:4px 0;">${dayNum}</div>
-            <div style="font-size:0.78rem;font-weight:600;letter-spacing:0.4px;">${escapeHtml(monthAbbr)}</div>
-            ${awayLabel ? `<div style="font-size:0.7rem;margin-top:6px;opacity:0.75;">${escapeHtml(awayLabel)}</div>` : ''}
-          </div>
-          <div style="padding:18px 24px;flex:1;">
-            <div style="font-size:1.05rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">${escapeHtml(evt.title || '(untitled)')}</div>
-            <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
-              ${subcalName ? `<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:#eef2fb;color:#003da5;text-transform:uppercase;">${escapeHtml(subcalName)}</span>` : ''}
-              ${evt.who ? `<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:4px;background:${accentLight};color:${accentHex};text-transform:uppercase;">👤 ${escapeHtml(evt.who)}</span>` : ''}
-            </div>
-            ${options.showCostCenter ? `<div style="font-size:0.88rem;color:#666;margin-top:6px;">
-              💰 <strong>Charge to:</strong> <span style="font-family:ui-monospace,Menlo,monospace;color:${accentHex};font-weight:700;">${escapeHtml(dsm.cc)}</span> (${escapeHtml(dsm.name)})
-            </div>` : ''}
-            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="btn-event-detail" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px solid ${accentHex};color:${accentHex};font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">👁 Open event</button>
-              <button type="button" class="btn-add-custom" data-date="${escapeHtml(startKey)}" data-event-id="${escapeHtml(String(evt.id))}" style="background:#fff;border:1.5px dashed ${accentHex};color:${accentHex};font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">+ Add personal note</button>
-            </div>
-          </div>
+        <div class="upcoming-event-row btn-event-detail"
+             data-event-id="${escapeHtml(String(evt.id))}"
+             role="button"
+             tabindex="0"
+             style="background:#fff;border-radius:10px;padding:12px 16px;margin-bottom:8px;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.05);cursor:pointer;
+                    display:flex;align-items:center;gap:12px;
+                    ${isToday ? 'border:2px solid ' + accentHex + ';' : 'border:1px solid #eef1f6;'}
+                    transition:transform 0.08s ease, box-shadow 0.12s ease;"
+             onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.08)';"
+             onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';">
+          <span style="background:${isToday ? accentHex : accentLight};color:${isToday ? '#fff' : accentHex};
+                       font-size:0.7rem;font-weight:700;letter-spacing:0.5px;
+                       padding:5px 10px;border-radius:6px;white-space:nowrap;">
+            ${escapeHtml(dateBadge)}
+          </span>
+          <span style="flex:1;min-width:0;font-size:0.95rem;font-weight:600;color:#1a1a2e;
+                       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(evt.title || '(untitled)')}
+          </span>
+          <span style="color:${accentHex};font-size:0.75rem;font-weight:700;letter-spacing:0.4px;
+                       white-space:nowrap;">
+            DETAILS ›
+          </span>
         </div>
       `;
     });
