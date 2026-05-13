@@ -4138,29 +4138,35 @@ const MEDTRONIC_PAR = [
         Show ${moreCount} more ↓
       </button>` : '';
 
-    const heroHtml = `
-      <div style="background:linear-gradient(135deg,${accentHex} 0%,${accentHexEnd} 100%);color:#fff;border-radius:14px;padding:22px 28px;margin-bottom:18px;box-shadow:0 4px 18px rgba(${accent},0.18);">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <div style="flex:1;min-width:240px;">
-            <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">${escapeHtml(options.eyebrow || 'Upcoming events')}</div>
-            <div style="font-size:1.5rem;font-weight:700;${subtitle ? 'margin-bottom:6px;' : ''}">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
-            ${subtitle ? `<div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(subtitle)}</div>` : ''}
-          </div>
-          ${headerToggleHtml}
+    const heroHeader = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:6px;">${escapeHtml(options.eyebrow || 'Upcoming events')}</div>
+          <div style="font-size:1.5rem;font-weight:700;${subtitle ? 'margin-bottom:6px;' : ''}">${upcoming.length === 0 ? (options.emptyTitle || 'Nothing scheduled yet') : `You have ${upcoming.length} event${upcoming.length === 1 ? '' : 's'} coming up`}</div>
+          ${subtitle ? `<div style="font-size:0.92rem;color:rgba(255,255,255,0.85);">${escapeHtml(subtitle)}</div>` : ''}
         </div>
+        ${headerToggleHtml}
       </div>
     `;
+
+    // Outer gradient wrapper that contains BOTH the header and the event
+    // preview rows so the whole thing reads as one card.
+    const wrapOpen = `
+      <div style="background:linear-gradient(135deg,${accentHex} 0%,${accentHexEnd} 100%);color:#fff;border-radius:14px;padding:22px 24px;margin-bottom:18px;box-shadow:0 4px 18px rgba(${accent},0.18);">
+        ${heroHeader}
+    `;
+    const wrapClose = `</div>`;
 
     if (upcoming.length === 0) {
       const emptyMsg = options.emptyMessage
         || `When Josh adds your name to the <strong>"Who"</strong> field on a Teamup event, it will show up here automatically.`;
-      return heroHtml + `
-        <div style="background:#fff;border-radius:12px;padding:40px 30px;text-align:center;color:#888;font-size:0.95rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);margin-bottom:18px;">
-          <div style="font-size:2.2rem;margin-bottom:10px;">📅</div>
-          <div style="font-weight:600;color:#1a1a2e;margin-bottom:6px;">${escapeHtml(options.emptyTitle || 'No events scheduled with your name yet')}</div>
-          <div>${emptyMsg}</div>
+      return wrapOpen + `
+        <div style="background:rgba(255,255,255,0.95);border-radius:10px;padding:24px 20px;text-align:center;color:#666;font-size:0.95rem;">
+          <div style="font-size:1.8rem;margin-bottom:8px;">📅</div>
+          <div style="font-weight:600;color:#1a1a2e;margin-bottom:4px;">${escapeHtml(options.emptyTitle || 'No events scheduled with your name yet')}</div>
+          <div style="font-size:0.88rem;">${emptyMsg}</div>
         </div>
-      `;
+      ` + wrapClose;
     }
 
     const cardArray = upcoming.map(evt => {
@@ -4209,9 +4215,9 @@ const MEDTRONIC_PAR = [
       `;
     });
 
-    // Collapsible: if willCollapse, render first N visible + rest hidden +
-    // a bottom toggle button. The hero banner already has a matching top
-    // toggle button; both share class .btn-hero-expand and sync on click.
+    // Collapsible: if willCollapse, render first N visible + rest hidden.
+    // The hero banner already has a top toggle button (.btn-hero-expand) —
+    // no bottom toggle needed, one drop-down is enough.
     let cards;
     if (willCollapse) {
       const visible = cardArray.slice(0, collapseAfter).join('');
@@ -4219,15 +4225,11 @@ const MEDTRONIC_PAR = [
       cards = `
         ${visible}
         <div class="hero-extra-events" style="display:none;">${hidden}</div>
-        <button type="button" class="btn-hero-expand"
-                style="display:block;margin:0 auto 14px;background:#fff;border:1.5px solid ${options.accentHex || '#003da5'};color:${options.accentHex || '#003da5'};font-size:0.82rem;font-weight:700;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;">
-          Show ${moreCount} more ↓
-        </button>
       `;
     } else {
       cards = cardArray.join('');
     }
-    return heroHtml + cards;
+    return wrapOpen + cards + wrapClose;
   }
 
   // ──────────────────────────────────────────────────────────────────
