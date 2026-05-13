@@ -4331,10 +4331,17 @@ const MEDTRONIC_PAR = [
 
     // Build combined list of workshop cards + manual hour entries, sorted by date
     const items = [];
+    // Default end time per workshop type — falls back to event's end_dt
+    // or blank if neither matches.
+    function defaultEndForEvent(evt) {
+      const t = (evt.title || '').toLowerCase();
+      if (/\bent\s*immersion\b/.test(t)) return '15:00';   // 3 PM
+      if (/\braf\b/.test(t))             return '17:00';   // 5 PM
+      return (evt.end_dt || '').slice(11, 16) || '';
+    }
     workshops.forEach(w => {
       const evt = w.evt;
       const s = getShift(evt.id, w.dayKey);
-      const evtEndTime = (evt.end_dt || '').slice(11, 16);
       // Multi-day events show "Day 1 of 3" etc. so each card is clearly its own day
       const multiDayLabel = w.spanDays > 0 ? ` · Day ${w.dayIndex + 1} of ${w.spanDays + 1}` : '';
       items.push({
@@ -4348,7 +4355,7 @@ const MEDTRONIC_PAR = [
         // Default Latisha's shift start to 8:00 AM — she comes in before
         // the event starts to help set up. Saved value overrides this.
         startTime: s.startTime || '08:00',
-        endTime: s.endTime || evtEndTime || '',
+        endTime: s.endTime || defaultEndForEvent(evt),
         notes: s.notes || '',
       });
     });
