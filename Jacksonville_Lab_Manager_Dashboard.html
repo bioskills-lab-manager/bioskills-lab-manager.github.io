@@ -1191,25 +1191,28 @@ const TASK_TEMPLATES = {
 //
 // "Med Ed" is the fallback for non-rep events (R&D, training, etc.).
 // ═══════════════════════════════════════════════════════════════════
+// Source of truth: FY27 Sales Roster May07 (DM Roster tab). Last reconciled 2026-05-12.
+// Districts shown in trailing comment for traceability.
 const DSMS = [
-  { name: "Med Ed",            cc: "165929" },   // default for non-rep events
-  { name: "Allison Lopresti",  cc: "166257" },
-  { name: "Timothy Jordain",   cc: "166058" },
-  { name: "Dana Maradie",      cc: "163039" },
-  { name: "Martin Bowman",     cc: "166254" },
-  { name: "Justin Adley",      cc: "163038" },
-  { name: "Jose Rodriguez",    cc: "166054" },
-  { name: "Leslie Anderson",   cc: "166113" },
-  { name: "Jim Tansey",        cc: "166066" },
-  { name: "Jared Kraeling",    cc: "166096" },
-  { name: "J.R. Crain",        cc: "163037" },
-  { name: "Alicia Slone",      cc: "166255" },
-  { name: "Brian Daigre",      cc: "163034" },
-  { name: "Pete Paganucci",    cc: "166059" },
-  { name: "Jake Proffit",      cc: "166052" },
-  { name: "Matthew Anderson",  cc: "166256" },
-  { name: "Lindsey Rainey",    cc: "166067" },
-  { name: "Ross Hewitt",       cc: "166103" },
+  { name: "Med Ed",                    cc: "165929" },   // default for non-rep events
+  { name: "Allison Lopresti",          cc: "166257" },   // Mid-Atlantic (East)
+  { name: "Timothy Jordain",           cc: "166058" },   // Northeast (East)
+  { name: "Dana Maradie",              cc: "163039" },   // Metro NYC (East)
+  { name: "OPEN — Ohio Valley",        cc: "166254" },   // Ohio Valley (East) — DM seat OPEN as of 5/8/26 (prev: Martin Bowman)
+  { name: "Justin Adley",              cc: "163038" },   // Southeast (East)
+  { name: "Jose Rodriguez",            cc: "166054" },   // Florida (East)
+  { name: "Leslie Anderson",           cc: "166113" },   // Blue Ridge (East)
+  { name: "James B Tansey",            cc: "166066" },   // Chicago (West)
+  { name: "Jared Kraeling",            cc: "166096" },   // Mid-South (East)
+  { name: "John R Crain",              cc: "163037" },   // Red River (West)
+  { name: "Alicia Slone",              cc: "166255" },   // Great Lakes (East)
+  { name: "OPEN — Great Plains",       cc: "163034" },   // Great Plains (West) — DM seat OPEN as of 5/8/26 (prev: Brian Daigre)
+  { name: "Peter Paganucci",           cc: "166059" },   // Southwest (West)
+  { name: "Jake Proffitt",             cc: "166052" },   // Northwest (West)
+  { name: "Matthew Anderson",          cc: "166256" },   // Sierra Nevada (West)
+  { name: "Lindsey Rainey",            cc: "166067" },   // Rocky Mountain (West)
+  { name: "Ross Hewitt",               cc: "166103" },   // Midwest (West)
+  { name: "Jeffrey Tolbert",           cc: "TBD"     },  // Texas Coast (West) — new DM 5/8/26, cost center pending
 ];
 
 // Default DSM (used when no name detected) — Med Ed
@@ -4306,7 +4309,6 @@ const MEDTRONIC_PAR = [
     workshops.forEach(evt => {
       const startKey = (evt.start_dt || '').slice(0, 10);
       const s = sched.events[evt.id] || {};
-      const evtStartTime = (evt.start_dt || '').slice(11, 16);
       const evtEndTime = (evt.end_dt || '').slice(11, 16);
       items.push({
         kind: 'workshop',
@@ -4314,7 +4316,9 @@ const MEDTRONIC_PAR = [
         eventId: evt.id,
         evt,
         date: startKey,
-        startTime: s.startTime || evtStartTime || '',
+        // Default Latisha's shift start to 8:00 AM — she comes in before
+        // the event starts to help set up. Saved value overrides this.
+        startTime: s.startTime || '08:00',
         endTime: s.endTime || evtEndTime || '',
         notes: s.notes || '',
       });
@@ -4442,7 +4446,7 @@ const MEDTRONIC_PAR = [
       alert('Please use YYYY-MM-DD format (e.g. 2026-05-15).');
       return;
     }
-    const startTime = prompt('Start time (HH:MM, 24-hour):', '09:00');
+    const startTime = prompt('Start time (HH:MM, 24-hour):', '08:00');
     if (!startTime) return;
     const endTime = prompt('End time (HH:MM, 24-hour):', '15:00');
     if (!endTime) return;
