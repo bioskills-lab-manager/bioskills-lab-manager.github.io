@@ -4265,6 +4265,14 @@ const MEDTRONIC_PAR = [
     if (endMin <= startMin) return 0;
     return Math.round((endMin - startMin) / 6) / 10; // tenths of hours
   }
+  // Format a "HH:MM" 24-hour string as 12-hour with AM/PM (e.g. "08:00" → "8:00 AM")
+  function fmt12h(hhmm) {
+    if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return hhmm || '';
+    const [h, m] = hhmm.split(':').map(Number);
+    const ampm = h < 12 ? 'AM' : 'PM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
 
   function buildLatishaScheduleHeroHtml() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -4406,7 +4414,7 @@ const MEDTRONIC_PAR = [
         : `${DOW[d.getDay()]} · ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
       const hrs = hoursBetween(item.startTime, item.endTime);
       const timeRange = (item.startTime && item.endTime)
-        ? `${item.startTime}–${item.endTime}`
+        ? `${fmt12h(item.startTime)}–${fmt12h(item.endTime)}`
         : '— tap to set times';
       const hrsLabel = hrs > 0 ? `${hrs.toFixed(1)} hr` : '';
       const isManual = item.kind === 'manual';
@@ -4416,12 +4424,24 @@ const MEDTRONIC_PAR = [
       const titleText = isManual
         ? '<span style="font-style:italic;opacity:0.7;">Manual entry</span>'
         : escapeHtml(item.evt.title || '(untitled)') + (item.multiDayLabel || '');
+      // Cost center — detect DSM from event title, fall back to Med Ed
+      let costCenterHtml = '';
+      if (!isManual) {
+        const dsmName = detectDsmFromTitle(item.evt.title);
+        const dsm = dsmName ? dsmByName(dsmName) : dsmByName('Med Ed');
+        if (dsm) {
+          costCenterHtml = `
+            <div style="font-size:0.78rem;color:#1a1a2e;margin-top:6px;line-height:1.4;">
+              <strong style="color:#6a1b9a;">Charge to:</strong>
+              <span style="font-family:ui-monospace,Menlo,monospace;font-weight:700;">${escapeHtml(dsm.cc)}</span>
+              · ${escapeHtml(dsm.name)}
+            </div>`;
+        }
+      }
       const removeBtn = isManual
         ? `<button type="button" class="latisha-sched-remove" ${dataAttrs} title="Remove this manual entry"
                   style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:1.1rem;padding:2px 6px;">×</button>`
         : '';
-      // Compact row — date + title + hours preview. Click expands the
-      // edit panel below. Today is highlighted.
       return `
         <div class="latisha-sched-card" ${dataAttrs}
              style="background:rgba(255,255,255,${isToday ? '0.18' : '0.10'});border:1px solid rgba(255,255,255,${isToday ? '0.45' : '0.18'});border-radius:10px;margin-bottom:8px;color:#fff;overflow:hidden;">
@@ -4439,8 +4459,9 @@ const MEDTRONIC_PAR = [
             ${removeBtn}
             <span class="latisha-sched-chev" style="opacity:0.7;font-size:0.85rem;transition:transform 0.15s ease;">▸</span>
           </div>
-          <div class="latisha-sched-edit" style="display:none;padding:10px 14px 14px;background:rgba(255,255,255,0.96);color:#1a1a2e;border-top:1px solid rgba(255,255,255,0.4);">
-            <div style="display:grid;grid-template-columns:auto auto;gap:10px 14px;align-items:center;margin-bottom:8px;">
+          <div class="latisha-sched-edit" style="display:none;padding:12px 14px 14px;background:rgba(255,255,255,0.96);color:#1a1a2e;border-top:1px solid rgba(255,255,255,0.4);">
+            ${costCenterHtml}
+            <div style="display:grid;grid-template-columns:auto auto;gap:10px 14px;align-items:center;margin-top:10px;margin-bottom:8px;">
               <label style="font-size:0.72rem;font-weight:700;color:#6a1b9a;text-transform:uppercase;letter-spacing:0.5px;">Start</label>
               <input type="time" class="latisha-sched-start" value="${escapeHtml(item.startTime)}"
                      style="border:1.5px solid #d0d8e8;border-radius:6px;padding:6px 10px;font-size:0.9rem;font-family:inherit;width:130px;" />
