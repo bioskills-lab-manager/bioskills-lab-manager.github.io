@@ -1234,21 +1234,220 @@ const CATEGORY_DEFAULT_DSM = {
   other:            "Med Ed",
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// INSTITUTION → DSM MAP
+// Common hospital/program names mapped to the DSM whose territory they sit
+// in. Used when an event title says "UAB Sinus Cadaver Lab" — the app
+// recognizes UAB as Alabama → Mid-South district → Jared Kraeling and
+// charges his cost center automatically.
+//
+// Keys are searched as case-insensitive substrings (or word-boundary
+// matches for short acronyms to avoid false hits). Add entries as new
+// programs are scheduled.
+// ═══════════════════════════════════════════════════════════════════
+const INSTITUTION_TO_DSM = {
+  // Mid-South (Jared Kraeling) — AL, TN, MS, AR
+  'uab':                    'Jared Kraeling',
+  'university of alabama':  'Jared Kraeling',
+  'vanderbilt':             'Jared Kraeling',
+  'vandy':                  'Jared Kraeling',
+  'utmck':                  'Jared Kraeling',
+  'university of tennessee':'Jared Kraeling',
+  'ole miss':               'Jared Kraeling',
+  'umc jackson':            'Jared Kraeling',
+  // Florida (Jose Rodriguez)
+  'uf health':              'Jose Rodriguez',
+  'university of florida':  'Jose Rodriguez',
+  'usf health':             'Jose Rodriguez',
+  'university of south florida': 'Jose Rodriguez',
+  'umiami':                 'Jose Rodriguez',
+  'university of miami':    'Jose Rodriguez',
+  'jackson memorial':       'Jose Rodriguez',
+  'mayo jacksonville':      'Jose Rodriguez',
+  'mayo jax':               'Jose Rodriguez',
+  // Southeast (Justin Adley) — GA, SC, NC
+  'emory':                  'Justin Adley',
+  'mcg':                    'Justin Adley',
+  'medical college of georgia': 'Justin Adley',
+  'augusta university':     'Justin Adley',
+  'musc':                   'Justin Adley',
+  'medical university of south carolina': 'Justin Adley',
+  'duke':                   'Justin Adley',
+  'unc':                    'Justin Adley',
+  'university of north carolina': 'Justin Adley',
+  'wake forest':            'Justin Adley',
+  // Blue Ridge (Leslie Anderson) — VA, WV
+  'uva':                    'Leslie Anderson',
+  'university of virginia': 'Leslie Anderson',
+  'vcu':                    'Leslie Anderson',
+  'eastern virginia':       'Leslie Anderson',
+  'evms':                   'Leslie Anderson',
+  'wvu':                    'Leslie Anderson',
+  'west virginia':          'Leslie Anderson',
+  // Mid-Atlantic (Allison Lopresti) — PA, MD, DE
+  'johns hopkins':          'Allison Lopresti',
+  'hopkins':                'Allison Lopresti',
+  'university of maryland': 'Allison Lopresti',
+  'umaryland':              'Allison Lopresti',
+  'penn medicine':          'Allison Lopresti',
+  'university of pennsylvania': 'Allison Lopresti',
+  'penn ent':               'Allison Lopresti',
+  'jefferson':              'Allison Lopresti',
+  'pittsburgh':             'Allison Lopresti',
+  'upmc':                   'Allison Lopresti',
+  'temple':                 'Allison Lopresti',
+  // Northeast (Timothy Jordain) — MA, CT, NH, ME, VT, RI
+  'mass general':           'Timothy Jordain',
+  'mgh':                    'Timothy Jordain',
+  'brigham':                'Timothy Jordain',
+  'beth israel':            'Timothy Jordain',
+  'tufts':                  'Timothy Jordain',
+  'boston university':      'Timothy Jordain',
+  'bu medical':             'Timothy Jordain',
+  'harvard ent':            'Timothy Jordain',
+  'yale':                   'Timothy Jordain',
+  'brown':                  'Timothy Jordain',
+  'providence':             'Timothy Jordain',
+  'dartmouth':              'Timothy Jordain',
+  // Metro NYC (Dana Maradie)
+  'cornell':                'Dana Maradie',
+  'weill cornell':          'Dana Maradie',
+  'mt sinai':               'Dana Maradie',
+  'mount sinai':            'Dana Maradie',
+  'nyu':                    'Dana Maradie',
+  'columbia':               'Dana Maradie',
+  'nyee':                   'Dana Maradie',
+  'new york eye and ear':   'Dana Maradie',
+  'einstein':               'Dana Maradie',
+  'montefiore':             'Dana Maradie',
+  'northwell':              'Dana Maradie',
+  // Ohio Valley (OPEN — Ohio Valley)
+  'osu':                    'OPEN — Ohio Valley',
+  'ohio state':             'OPEN — Ohio Valley',
+  'cleveland clinic':       'OPEN — Ohio Valley',
+  'university of cincinnati':'OPEN — Ohio Valley',
+  'uc health':              'OPEN — Ohio Valley',
+  'university hospitals':   'OPEN — Ohio Valley',
+  // Great Lakes (Alicia Slone) — MI, IN
+  'u of michigan':          'Alicia Slone',
+  'university of michigan': 'Alicia Slone',
+  'umich':                  'Alicia Slone',
+  'henry ford':             'Alicia Slone',
+  'wayne state':            'Alicia Slone',
+  'iu health':              'Alicia Slone',
+  'indiana university':     'Alicia Slone',
+  'iu school of medicine':  'Alicia Slone',
+  // Chicago (James B Tansey) — IL, WI
+  'northwestern':           'James B Tansey',
+  'rush':                   'James B Tansey',
+  'university of chicago':  'James B Tansey',
+  'uchicago':               'James B Tansey',
+  'loyola':                 'James B Tansey',
+  'uic':                    'James B Tansey',
+  'uw madison':             'James B Tansey',
+  'university of wisconsin':'James B Tansey',
+  'froedtert':              'James B Tansey',
+  'medical college of wisconsin': 'James B Tansey',
+  // Red River (John R Crain) — TX north, OK, AR
+  'ut southwestern':        'John R Crain',
+  'utsw':                   'John R Crain',
+  'parkland':               'John R Crain',
+  'university of oklahoma': 'John R Crain',
+  'ou medicine':            'John R Crain',
+  'uams':                   'John R Crain',
+  'university of arkansas': 'John R Crain',
+  // Texas Coast (Jeffrey Tolbert) — TX south/coast
+  'baylor college':         'Jeffrey Tolbert',
+  'bcm':                    'Jeffrey Tolbert',
+  'ut health houston':      'Jeffrey Tolbert',
+  'memorial hermann':       'Jeffrey Tolbert',
+  'methodist houston':      'Jeffrey Tolbert',
+  'utmb':                   'Jeffrey Tolbert',
+  'university of texas medical branch': 'Jeffrey Tolbert',
+  'ut san antonio':         'Jeffrey Tolbert',
+  // Great Plains (OPEN) — MN, ND, SD, NE, IA, KS
+  'mayo rochester':         'OPEN — Great Plains',
+  'mayo clinic rochester':  'OPEN — Great Plains',
+  'university of minnesota':'OPEN — Great Plains',
+  'university of iowa':     'OPEN — Great Plains',
+  'university of nebraska': 'OPEN — Great Plains',
+  'unmc':                   'OPEN — Great Plains',
+  'kumc':                   'OPEN — Great Plains',
+  'university of kansas':   'OPEN — Great Plains',
+  // Southwest (Peter Paganucci) — AZ, NM
+  'university of arizona':  'Peter Paganucci',
+  'banner':                 'Peter Paganucci',
+  'mayo phoenix':           'Peter Paganucci',
+  'mayo arizona':           'Peter Paganucci',
+  'unm':                    'Peter Paganucci',
+  'university of new mexico':'Peter Paganucci',
+  // Northwest (Jake Proffitt) — WA, OR, ID, AK
+  'uw seattle':             'Jake Proffitt',
+  'university of washington':'Jake Proffitt',
+  'ohsu':                   'Jake Proffitt',
+  'oregon health':          'Jake Proffitt',
+  'virginia mason':         'Jake Proffitt',
+  // Sierra Nevada (Matthew Anderson) — NV, Northern CA
+  'stanford':               'Matthew Anderson',
+  'ucsf':                   'Matthew Anderson',
+  'unr':                    'Matthew Anderson',
+  'university of nevada':   'Matthew Anderson',
+  'uc davis':               'Matthew Anderson',
+  // Rocky Mountain (Lindsey Rainey) — CO, UT, WY, MT
+  'university of colorado': 'Lindsey Rainey',
+  'cu anschutz':            'Lindsey Rainey',
+  'denver health':          'Lindsey Rainey',
+  'university of utah':     'Lindsey Rainey',
+  'intermountain':          'Lindsey Rainey',
+  // Midwest (Ross Hewitt) — MO, KY
+  'wash u':                 'Ross Hewitt',
+  'washington university':  'Ross Hewitt',
+  'wustl':                  'Ross Hewitt',
+  'university of missouri': 'Ross Hewitt',
+  'mizzou':                 'Ross Hewitt',
+  'saint louis university': 'Ross Hewitt',
+  'slu':                    'Ross Hewitt',
+  'university of kentucky': 'Ross Hewitt',
+  'university of louisville':'Ross Hewitt',
+  'uofl':                   'Ross Hewitt',
+};
+
+// Short institution acronyms that MUST be matched as whole words (to avoid
+// false hits like "uf" matching "stuff"). Anything 4+ chars uses plain
+// substring match.
+const INSTITUTION_WORD_BOUNDED = new Set([
+  'uab','ucsf','ucla','uw','uf','usf','uic','iu','ou','ut','vu','bu','uc',
+  'mgh','musc','mcg','wvu','uva','vcu','osu','utsw','uams','utmb','unm',
+  'unr','slu','bcm','umc','umich','umd','upmc','nyu','nyee','evms','kumc',
+  'unmc','ohsu','wustl','uofl','vandy'
+]);
+
 function detectDsmFromTitle(title) {
   if (!title) return null;
   const t = title.toLowerCase();
-  // Try to match any DSM name (full name first, then last name as fallback)
-  // Skip "Med Ed" — it's a fallback, never auto-detected from title
-  const candidates = DSMS.filter(d => d.name !== "Med Ed");
+
+  // 1) Institution scan — UAB, Emory, Hopkins, etc. → maps to territory DSM
+  const instKeys = Object.keys(INSTITUTION_TO_DSM)
+    .sort((a, b) => b.length - a.length);  // longest first to avoid 'uf' eating 'uf health'
+  for (const key of instKeys) {
+    const isWordBounded = INSTITUTION_WORD_BOUNDED.has(key) || key.length <= 4;
+    if (isWordBounded) {
+      const re = new RegExp("\\b" + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\b", 'i');
+      if (re.test(title)) return INSTITUTION_TO_DSM[key];
+    } else if (t.includes(key)) {
+      return INSTITUTION_TO_DSM[key];
+    }
+  }
+
+  // 2) Direct DSM name in title — full name first, then last name as fallback.
+  const candidates = DSMS.filter(d => d.name !== "Med Ed" && !d.name.startsWith('OPEN'));
   for (const d of candidates) {
     if (t.includes(d.name.toLowerCase())) return d.name;
   }
   // Last-name only fallback (helps when title says "Rep Rainey")
   for (const d of candidates) {
     const last = d.name.split(/\s+/).slice(-1)[0].toLowerCase();
-    // Skip very short last names that could collide with words
     if (last.length < 5) continue;
-    // Match as whole word
     const re = new RegExp("\\b" + last.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\b", 'i');
     if (re.test(title)) return d.name;
   }
