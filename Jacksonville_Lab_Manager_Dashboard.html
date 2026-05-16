@@ -4853,7 +4853,9 @@ const MEDTRONIC_PAR = [
     opts = opts || {};
     const today = new Date(); today.setHours(0,0,0,0);
     const todayKey = ymd(today);
-    const horizon = ymd(addDays(today, ADMIN_CONFIG.daysAhead));
+    // Full mode → next 90 days; compact still uses daysAhead
+    const horizonDays = opts.compact ? ADMIN_CONFIG.daysAhead : 90;
+    const horizon = ymd(addDays(today, horizonDays));
 
     const evts = state.events.filter(evt => {
       if (!isEventVisibleForRole(evt)) return false;
@@ -4891,51 +4893,71 @@ const MEDTRONIC_PAR = [
       groups[k].push(evt);
     });
 
-    const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 30).getMonth()]} ${addDays(today, 30).getDate()}`;
+    const lastEvent = parseYMD(order[order.length - 1]);
+    const rangeLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[lastEvent.getMonth()]} ${lastEvent.getDate()}`;
 
     let html = '';
     if (!opts.compact) {
       html += `
         <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:16px 20px;margin-bottom:14px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
-          <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Calendar · ${escapeHtml(monthLabel)}</div>
-          <div style="font-size:1.05rem;font-weight:700;">${evts.length} event${evts.length === 1 ? '' : 's'} coming up</div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Upcoming calendar · next 3 months</div>
+          <div style="font-size:1.1rem;font-weight:700;">${evts.length} event${evts.length === 1 ? '' : 's'} · ${escapeHtml(rangeLabel)}</div>
           <div style="font-size:0.82rem;color:rgba(255,255,255,0.85);margin-top:2px;">Tap any event to open its detail page.</div>
         </div>
       `;
     } else {
-      html += `<div style="font-size:0.78rem;font-weight:700;color:#003da5;margin-bottom:8px;">📅 ${escapeHtml(monthLabel)}</div>`;
+      html += `<div style="font-size:0.78rem;font-weight:700;color:#003da5;margin-bottom:8px;">📅 ${escapeHtml(rangeLabel)}</div>`;
     }
 
-    html += `<div style="background:#fff;border-radius:12px;padding:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);">`;
-
+    // Group dates by calendar month for clearer mobile reading
+    const byMonth = {};
+    const monthOrder = [];
     order.forEach(dateKey => {
       const d = parseYMD(dateKey);
-      const isToday = dateKey === todayKey;
-      const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
-      const dateLabel = isToday
-        ? `Today · ${dow}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`
-        : `${dow}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
-      html += `<div style="margin-bottom:10px;">
-        <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:${isToday ? '#003da5' : '#888'};margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #eef1f6;">${escapeHtml(dateLabel)}</div>`;
-      groups[dateKey].forEach(evt => {
-        const cat = classifyEvent(evt);
-        const color = catColor(cat);
-        const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
-        html += `
-          <div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}"
-               style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;background:#f8fafd;margin-bottom:4px;cursor:pointer;border-left:4px solid ${color};">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:0.88rem;font-weight:600;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(evt.title || '(untitled)')}</div>
-              <div style="font-size:0.72rem;color:#666;margin-top:2px;">${escapeHtml(tmpl.label)}${evt.who ? ` · 👤 ${escapeHtml(evt.who)}` : ''}</div>
-            </div>
-            <div style="font-size:1.2rem;color:#aaa;">›</div>
+      const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!byMonth[monthKey]) { byMonth[monthKey] = []; monthOrder.push(monthKey); }
+      byMonth[monthKey].push(dateKey);
+    });
+
+    monthOrder.forEach(monthKey => {
+      const [year, monthIdx] = monthKey.split('-').map(Number);
+      const monthName = ['January','February','March','April','May','June',
+        'July','August','September','October','November','December'][monthIdx];
+      html += `
+        <div style="background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,0.05);margin-bottom:14px;">
+          <div style="font-size:1rem;font-weight:800;color:#003da5;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #eef1f6;">
+            ${escapeHtml(monthName)} ${year}
           </div>
-        `;
+      `;
+      byMonth[monthKey].forEach(dateKey => {
+        const d = parseYMD(dateKey);
+        const isToday = dateKey === todayKey;
+        const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+        const dateLabel = isToday
+          ? `Today · ${dow} ${d.getDate()}`
+          : `${dow} ${d.getDate()}`;
+        html += `<div style="margin-bottom:10px;">
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:${isToday ? '#003da5' : '#666'};margin-bottom:5px;">${escapeHtml(dateLabel)}</div>`;
+        groups[dateKey].forEach(evt => {
+          const cat = classifyEvent(evt);
+          const color = catColor(cat);
+          const tmpl = TASK_TEMPLATES[cat] || TASK_TEMPLATES.other;
+          html += `
+            <div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}"
+                 style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:9px;background:#f8fafd;margin-bottom:5px;cursor:pointer;border-left:4px solid ${color};">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:0.95rem;font-weight:600;color:#1a1a2e;line-height:1.3;">${escapeHtml(evt.title || '(untitled)')}</div>
+                <div style="font-size:0.75rem;color:#666;margin-top:3px;">${escapeHtml(tmpl.label)}${evt.who ? ` · 👤 ${escapeHtml(evt.who)}` : ''}</div>
+              </div>
+              <div style="font-size:1.2rem;color:#aaa;">›</div>
+            </div>
+          `;
+        });
+        html += `</div>`;
       });
       html += `</div>`;
     });
 
-    html += `</div>`;
     return html;
   }
 
@@ -4949,18 +4971,17 @@ const MEDTRONIC_PAR = [
     const today = new Date(); today.setHours(0,0,0,0);
     const todayKey = ymd(today);
 
-    // Start from the SUNDAY of this week. 4 weeks fits ~28 days of upcoming
-    // events comfortably without dominating the page.
-    const start = new Date(today);
-    start.setDate(today.getDate() - today.getDay());
-    const numWeeks = compact ? 3 : 4;
-    const cells = [];
-    for (let i = 0; i < numWeeks * 7; i++) {
-      const d = addDays(start, i);
-      cells.push({ date: d, key: ymd(d), events: [] });
-    }
-    const cellByKey = Object.fromEntries(cells.map(c => [c.key, c]));
+    // Compact (legacy) mode still renders 3 weeks for old callers. Full mode
+    // now renders THREE FULL CALENDAR MONTHS for at-a-glance planning.
+    const catColor = (cat) => ({
+      lab:'#003da5', training:'#6a1b9a', rd:'#2e7d32',
+      specimenDelivery:'#c2185b', specimenPickup:'#c2185b',
+      cleanup:'#00838f', install:'#558b2f', meeting:'#5d4037',
+      remote:'#90a4ae', hold:'#9e9e9e', closed:'#bdbdbd', other:'#90a4ae',
+    })[cat] || '#90a4ae';
 
+    // Bucket every visible event by day key for fast lookups
+    const eventsByDay = {};
     state.events.forEach(evt => {
       if (!isEventVisibleForRole(evt)) return;
       if (CURRENT_ROLE_KEY === 'bert') {
@@ -4970,86 +4991,153 @@ const MEDTRONIC_PAR = [
       }
       const startKey = (evt.start_dt || '').slice(0, 10);
       const endKey   = (evt.end_dt   || evt.start_dt || '').slice(0, 10);
+      if (!startKey) return;
       const sd = parseYMD(startKey);
       const ed = parseYMD(endKey);
       const span = Math.max(0, Math.round((ed - sd) / 86400000));
       for (let i = 0; i <= span; i++) {
         const k = ymd(addDays(sd, i));
-        if (cellByKey[k]) cellByKey[k].events.push(evt);
+        (eventsByDay[k] = eventsByDay[k] || []).push(evt);
       }
     });
 
-    const catColor = (cat) => ({
-      lab:'#003da5', training:'#6a1b9a', rd:'#2e7d32',
-      specimenDelivery:'#c2185b', specimenPickup:'#c2185b',
-      cleanup:'#00838f', install:'#558b2f', meeting:'#5d4037',
-      remote:'#90a4ae', hold:'#9e9e9e', closed:'#bdbdbd', other:'#90a4ae',
-    })[cat] || '#90a4ae';
-
     const dayLabels = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
-    const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 30).getMonth()]} ${addDays(today, 30).getDate()}`;
-    const chipLimit = compact ? 2 : 3;
-    const minCellHeight = compact ? 60 : 90;
-    const chipFontSize = compact ? '0.62rem' : '0.68rem';
-    const dayNumSize = compact ? '0.72rem' : '0.78rem';
 
-    let html = '';
-    if (!compact) {
-      html += `
-        <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:18px 24px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
-          <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Calendar</div>
-          <div style="font-size:1.25rem;font-weight:700;">${escapeHtml(monthLabel)}</div>
-          <div style="font-size:0.85rem;color:rgba(255,255,255,0.85);margin-top:2px;">Click any event chip to open its full detail page.</div>
-        </div>
+    // Render ONE month grid — used 3x in full mode
+    function renderMonthGrid(year, month) {
+      const monthName = ['January','February','March','April','May','June',
+        'July','August','September','October','November','December'][month];
+      const firstOfMonth = new Date(year, month, 1);
+      const lastOfMonth = new Date(year, month + 1, 0);
+      const startOffset = firstOfMonth.getDay();   // 0 = Sun
+      const daysInMonth = lastOfMonth.getDate();
+      // Pad start back to Sunday and end forward to Saturday for a clean grid
+      const cells = [];
+      for (let i = 0; i < startOffset; i++) {
+        cells.push({ date: addDays(firstOfMonth, -(startOffset - i)), outOfMonth: true });
+      }
+      for (let i = 1; i <= daysInMonth; i++) {
+        cells.push({ date: new Date(year, month, i), outOfMonth: false });
+      }
+      while (cells.length % 7 !== 0) {
+        const last = cells[cells.length - 1].date;
+        cells.push({ date: addDays(last, 1), outOfMonth: true });
+      }
+      cells.forEach(c => { c.key = ymd(c.date); c.events = eventsByDay[c.key] || []; });
+
+      const chipLimit = 3;
+
+      let monthHtml = `
+        <div style="background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(0,0,0,0.05);margin-bottom:18px;">
+          <div style="font-size:1.1rem;font-weight:800;color:#003da5;letter-spacing:0.3px;margin-bottom:12px;">
+            ${escapeHtml(monthName)} ${year}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
+            ${dayLabels.map(d => `<div style="font-size:0.66rem;font-weight:700;letter-spacing:0.6px;color:#888;text-align:center;padding:4px 0;">${d}</div>`).join('')}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
       `;
+      cells.forEach(c => {
+        const isToday = c.key === todayKey;
+        const isPast = c.key < todayKey;
+        const cellBg = c.outOfMonth ? '#fafbfd' : (isToday ? '#e3f2fd' : (isPast ? '#f7f8fa' : '#fff'));
+        const cellBorder = isToday ? '2px solid #003da5' : '1px solid #eef1f6';
+        const dayNumColor = c.outOfMonth ? '#ccc' : (isToday ? '#003da5' : (isPast ? '#aaa' : '#1a1a2e'));
+        const dayNumWeight = isToday ? '800' : '700';
+        const chips = c.events.slice(0, chipLimit).map(evt => {
+          const cat = classifyEvent(evt);
+          const color = catColor(cat);
+          const titleAttr = (evt.title || '') + (evt.who ? ` · 👤 ${evt.who}` : '');
+          return `<div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}" title="${escapeHtml(titleAttr)}"
+                       style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${color};color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;line-height:1.3;">
+                    ${escapeHtml((evt.title || '(untitled)').slice(0, 26))}
+                  </div>`;
+        }).join('');
+        const moreCount = c.events.length - chipLimit;
+        const moreHtml = moreCount > 0 ? `<div style="font-size:0.65rem;color:#888;margin-top:2px;font-weight:600;">+${moreCount} more</div>` : '';
+        monthHtml += `
+          <div style="min-height:96px;background:${cellBg};border:${cellBorder};border-radius:6px;padding:6px 7px;display:flex;flex-direction:column;gap:3px;${c.outOfMonth || isPast ? 'opacity:0.72;' : ''}">
+            <div style="font-size:0.86rem;font-weight:${dayNumWeight};color:${dayNumColor};line-height:1;">${c.date.getDate()}</div>
+            ${chips}
+            ${moreHtml}
+          </div>
+        `;
+      });
+      monthHtml += `</div></div>`;
+      return monthHtml;
     }
-    html += `
-      <div style="background:#fff;border-radius:12px;padding:${compact ? '10px' : '12px'};box-shadow:0 2px 10px rgba(0,0,0,0.05);">
-        ${compact ? `<div style="font-size:0.8rem;font-weight:700;color:#003da5;margin-bottom:8px;">📅 ${escapeHtml(monthLabel)}</div>` : ''}
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">
-          ${dayLabels.map(d => `<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.5px;color:#888;text-align:center;padding:3px 0;">${d}</div>`).join('')}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">
+
+    // ── COMPACT MODE (legacy) — single 3-week sliver ──────────────
+    if (compact) {
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay());
+      const compactCells = [];
+      for (let i = 0; i < 21; i++) {
+        const d = addDays(start, i);
+        compactCells.push({ date: d, key: ymd(d), events: eventsByDay[ymd(d)] || [] });
+      }
+      const monthLabel = `${MONTHS_SHORT[today.getMonth()]} ${today.getDate()} – ${MONTHS_SHORT[addDays(today, 20).getMonth()]} ${addDays(today, 20).getDate()}`;
+      let html = `
+        <div style="background:#fff;border-radius:12px;padding:10px;box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+          <div style="font-size:0.8rem;font-weight:700;color:#003da5;margin-bottom:8px;">📅 ${escapeHtml(monthLabel)}</div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">
+            ${dayLabels.map(d => `<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.5px;color:#888;text-align:center;padding:3px 0;">${d}</div>`).join('')}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">
+      `;
+      compactCells.forEach(c => {
+        const isToday = c.key === todayKey;
+        const isPast = c.key < todayKey;
+        const cellBg = isToday ? '#e3f2fd' : (isPast ? '#fafafa' : '#fff');
+        const cellBorder = isToday ? '2px solid #003da5' : '1px solid #eef1f6';
+        const dayNumColor = isToday ? '#003da5' : (isPast ? '#aaa' : '#1a1a2e');
+        const chips = c.events.slice(0, 2).map(evt => {
+          const cat = classifyEvent(evt);
+          const color = catColor(cat);
+          return `<div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}" title="${escapeHtml(evt.title || '')}" style="font-size:0.62rem;padding:1px 5px;border-radius:3px;background:${color};color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">${escapeHtml((evt.title || '(untitled)').slice(0, 18))}</div>`;
+        }).join('');
+        const moreCount = c.events.length - 2;
+        const moreHtml = moreCount > 0 ? `<div style="font-size:0.6rem;color:#888;margin-top:1px;">+${moreCount}</div>` : '';
+        html += `
+          <div style="min-height:60px;background:${cellBg};border:${cellBorder};border-radius:5px;padding:4px 6px;display:flex;flex-direction:column;gap:2px;${isPast ? 'opacity:0.7;' : ''}">
+            <div style="font-size:0.72rem;font-weight:700;color:${dayNumColor};">${c.date.getDate()}</div>${chips}${moreHtml}
+          </div>
+        `;
+      });
+      html += `</div></div>`;
+      return html;
+    }
+
+    // ── FULL MODE — three full calendar months stacked ──────────────
+    const m1 = today.getMonth();
+    const y1 = today.getFullYear();
+    const next = (mo, yr) => mo === 11 ? [0, yr + 1] : [mo + 1, yr];
+    const [m2, y2] = next(m1, y1);
+    const [m3, y3] = next(m2, y2);
+
+    const lastDate = new Date(y3, m3 + 1, 0);
+    const headerLabel = `${MONTHS_SHORT[m1]} ${y1} – ${MONTHS_SHORT[m3]} ${y3}`;
+
+    let html = `
+      <div style="background:linear-gradient(135deg,#003da5 0%,#0050d0 100%);color:#fff;border-radius:14px;padding:18px 24px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,61,165,0.15);">
+        <div style="font-size:0.78rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Upcoming calendar · next 3 months</div>
+        <div style="font-size:1.4rem;font-weight:700;">${escapeHtml(headerLabel)}</div>
+        <div style="font-size:0.88rem;color:rgba(255,255,255,0.85);margin-top:3px;">Click any event to see full details.</div>
+      </div>
     `;
-
-    cells.forEach(c => {
-      const isToday = c.key === todayKey;
-      const isPast = c.key < todayKey;
-      const cellBg = isToday ? '#e3f2fd' : (isPast ? '#fafafa' : '#fff');
-      const cellBorder = isToday ? '2px solid #003da5' : '1px solid #eef1f6';
-      const dayNumColor = isToday ? '#003da5' : (isPast ? '#aaa' : '#1a1a2e');
-      const chips = c.events.slice(0, chipLimit).map(evt => {
-        const cat = classifyEvent(evt);
-        const color = catColor(cat);
-        const titleAttr = (evt.title || '') + (evt.who ? ` · 👤 ${evt.who}` : '');
-        const truncTo = compact ? 18 : 30;
-        return `<div class="cal-chip" data-event-id="${escapeHtml(String(evt.id))}" title="${escapeHtml(titleAttr)}" style="font-size:${chipFontSize};padding:1px 5px;border-radius:3px;background:${color};color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">${escapeHtml((evt.title || '(untitled)').slice(0, truncTo))}</div>`;
-      }).join('');
-      const moreCount = c.events.length - chipLimit;
-      const moreHtml = moreCount > 0 ? `<div style="font-size:0.6rem;color:#888;margin-top:1px;">+${moreCount}</div>` : '';
-      html += `
-        <div style="min-height:${minCellHeight}px;background:${cellBg};border:${cellBorder};border-radius:5px;padding:4px 6px;display:flex;flex-direction:column;gap:2px;${isPast ? 'opacity:0.7;' : ''}">
-          <div style="font-size:${dayNumSize};font-weight:700;color:${dayNumColor};">${c.date.getDate()}</div>
-          ${chips}
-          ${moreHtml}
-        </div>
-      `;
-    });
-
-    html += `</div></div>`;
-
-    if (!compact) {
-      html += `
-        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;font-size:0.75rem;color:#666;">
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#003da5;"></span>Lab Session</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#6a1b9a;"></span>Training</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#2e7d32;"></span>R&D</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#c2185b;"></span>Specimen</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#00838f;"></span>Cleanup</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#90a4ae;"></span>Other</span>
-        </div>
-      `;
-    }
+    html += renderMonthGrid(y1, m1);
+    html += renderMonthGrid(y2, m2);
+    html += renderMonthGrid(y3, m3);
+    html += `
+      <div style="margin-top:4px;background:#fff;border-radius:10px;padding:12px 16px;display:flex;gap:14px;flex-wrap:wrap;font-size:0.78rem;color:#555;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:#003da5;"></span>Lab Session</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:#6a1b9a;"></span>Training</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:#2e7d32;"></span>R&D</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:#c2185b;"></span>Specimen</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:#00838f;"></span>Cleanup</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:#90a4ae;"></span>Other</span>
+      </div>
+    `;
     return html;
   }
 
@@ -5075,7 +5163,10 @@ const MEDTRONIC_PAR = [
     const today = new Date();
     today.setHours(0,0,0,0);
     const start = ymd(today);
-    const end = ymd(addDays(today, cfg.daysAhead));
+    // Fetch out to 90 days so the calendar view can show 3 months. Prep-task
+    // rendering still respects cfg.daysAhead (30 days) — events past that
+    // window only appear in the calendar grid, not the day-by-day to-do.
+    const end = ymd(addDays(today, Math.max(cfg.daysAhead, 90)));
     // Pad start by 7 days backward so we still see prep tasks for events that already started
     const startPadded = ymd(addDays(today, -10));
 
