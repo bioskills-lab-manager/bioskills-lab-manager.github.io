@@ -4703,7 +4703,174 @@ const MEDTRONIC_PAR = [
         </div>
       </a>
     `;
-    return heroOpen + cardsHtml + heroClose + calendarCard;
+    // Third card — Past 7 days review for charge-back / invoicing
+    const past7Card = buildLatishaPast7DaysCard();
+    return heroOpen + cardsHtml + heroClose + calendarCard + past7Card;
+  }
+
+  // Build the Past 7 Days card — collapsed by default. Shows every shift
+  // worked in the last 7 days, grouped by cost center, with totals so
+  // Latisha can submit invoices broken out by CC.
+  function buildLatishaPast7DaysCard() {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayKey = ymd(today);
+    const earliestKey = ymd(addDays(today, -7));
+    const sched = loadLatishaSchedule();
+
+    // Workshops from the past 7 days where Latisha was tagged
+    const taggedEvents = state.events.filter(evt => {
+      const who = (evt.who || '').toLowerCase();
+      const title = (evt.title || '').toLowerCase();
+      return who.includes('latisha') || title.includes('latisha');
+    });
+    const pastShifts = [];
+    taggedEvents.forEach(evt => {
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      const endKey   = (evt.end_dt || evt.start_dt || '').slice(0, 10);
+      if (!startKey) return;
+      const startD = parseYMD(startKey);
+      const endD   = parseYMD(endKey);
+      const spanDays = Math.max(0, Math.round((endD - startD) / 86400000));
+      for (let i = 0; i <= spanDays; i++) {
+        const dK = ymd(addDays(startD, i));
+        if (dK < earliestKey || dK >= todayKey) continue;
+        const s = sched.events[evt.id + ':' + dK] || sched.events[evt.id] || {};
+        if (!s.startTime || !s.endTime) continue; // unconfirmed shifts skipped
+        pastShifts.push({
+          kind: 'workshop',
+          dayKey: dK,
+          title: evt.title || '(untitled)',
+          startTime: s.startTime,
+          endTime: s.endTime,
+          notes: s.notes || '',
+          dsmName: detectDsmFromTitle(evt.title) || 'Med Ed',
+        });
+      }
+    });
+    sched.manual.forEach(m => {
+      if (!m.date || m.date < earliestKey || m.date >= todayKey) return;
+      if (!m.startTime || !m.endTime) return;
+      pastShifts.push({
+        kind: 'manual',
+        dayKey: m.date,
+        title: 'Manual entry',
+        startTime: m.startTime,
+        endTime: m.endTime,
+        notes: m.notes || '',
+        dsmName: 'Med Ed',
+      });
+    });
+
+    if (pastShifts.length === 0) {
+      return `
+        <div style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid #00838f;border-radius:10px;padding:14px 18px;margin-bottom:14px;
+                    box-shadow:0 2px 6px rgba(0,0,0,0.04);
+                    display:flex;align-items:center;gap:14px;">
+          <div style="background:#e0f7fa;color:#00838f;border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">⏱️</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#00838f;margin-bottom:2px;">Past 7 days</div>
+            <div style="font-size:0.92rem;font-weight:600;color:#1a1a2e;">No completed shifts to review yet</div>
+            <div style="font-size:0.8rem;color:#666;margin-top:2px;">Once you confirm start/end times on a shift, it'll appear here for invoicing.</div>
+          </div>
+        </div>
+      `;
+    }
+
+    pastShifts.sort((a, b) => b.dayKey.localeCompare(a.dayKey)); // newest first
+
+    // Group by DSM/cost center
+    const byCC = {};
+    pastShifts.forEach(s => {
+      const dsm = dsmByName(s.dsmName) || dsmByName('Med Ed');
+      const ccKey = dsm.cc;
+      if (!byCC[ccKey]) byCC[ccKey] = { dsmName: dsm.name, cc: dsm.cc, shifts: [], totalHours: 0 };
+      const hrs = hoursBetween(s.startTime, s.endTime);
+      byCC[ccKey].shifts.push({ ...s, hours: hrs });
+      byCC[ccKey].totalHours += hrs;
+    });
+    const grandTotal = pastShifts.reduce((sum, s) => sum + hoursBetween(s.startTime, s.endTime), 0);
+
+    // Build the grouped breakdown
+    const groupBlocks = Object.values(byCC).map(g => {
+      const shiftRows = g.shifts.map(s => {
+        const d = parseYMD(s.dayKey);
+        const dateLabel = `${DOW[d.getDay()]} ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+        return `
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed #eef1f6;font-size:0.85rem;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(s.title)}</div>
+              <div style="color:#888;font-size:0.78rem;margin-top:1px;">${escapeHtml(dateLabel)} · ${escapeHtml(fmt12h(s.startTime))}–${escapeHtml(fmt12h(s.endTime))}</div>
+            </div>
+            <div style="font-weight:700;color:#00838f;white-space:nowrap;font-variant-numeric:tabular-nums;">${s.hours.toFixed(1)} hr</div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid #eef1f6;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;">
+            <div>
+              <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#888;">Charge to</span>
+              <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;">
+                <span style="font-family:ui-monospace,Menlo,monospace;color:#00838f;">${escapeHtml(g.cc)}</span>
+                · ${escapeHtml(g.dsmName)}
+              </div>
+            </div>
+            <div style="background:#e0f7fa;color:#00838f;font-weight:700;font-size:0.92rem;padding:5px 12px;border-radius:8px;white-space:nowrap;">
+              ${g.totalHours.toFixed(1)} hr total
+            </div>
+          </div>
+          ${shiftRows}
+        </div>
+      `;
+    }).join('');
+
+    // Plain-text export for clipboard
+    const dateRange = (() => {
+      const start = parseYMD(earliestKey);
+      const end = parseYMD(ymd(addDays(today, -1)));
+      return `${MONTHS_SHORT[start.getMonth()]} ${start.getDate()} – ${MONTHS_SHORT[end.getMonth()]} ${end.getDate()}`;
+    })();
+    const clipboardText = (() => {
+      const lines = [`Latisha — Past 7 days (${dateRange})`, ''];
+      Object.values(byCC).forEach(g => {
+        lines.push(`Charge to: ${g.cc} · ${g.dsmName}`);
+        g.shifts.forEach(s => {
+          const d = parseYMD(s.dayKey);
+          lines.push(`  ${DOW[d.getDay()]} ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}: ${s.title} · ${fmt12h(s.startTime)}–${fmt12h(s.endTime)} · ${s.hours.toFixed(1)} hr`);
+        });
+        lines.push(`  Subtotal: ${g.totalHours.toFixed(1)} hr`);
+        lines.push('');
+      });
+      lines.push(`Grand total: ${grandTotal.toFixed(1)} hr`);
+      return lines.join('\n');
+    })();
+
+    return `
+      <div class="latisha-past7-card" style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid #00838f;border-radius:10px;margin-bottom:14px;box-shadow:0 2px 6px rgba(0,0,0,0.04);overflow:hidden;">
+        <div class="latisha-past7-summary"
+             style="display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer;user-select:none;">
+          <div style="background:#e0f7fa;color:#00838f;border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">⏱️</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#00838f;margin-bottom:2px;">Past 7 days · review & charge-back</div>
+            <div style="font-size:0.98rem;font-weight:700;color:#1a1a2e;">${grandTotal.toFixed(1)} hours worked · ${pastShifts.length} shift${pastShifts.length === 1 ? '' : 's'}</div>
+            <div style="font-size:0.82rem;color:#666;margin-top:1px;">${escapeHtml(dateRange)} · tap to see breakdown</div>
+          </div>
+          <span class="latisha-past7-chev" style="color:#00838f;font-size:0.95rem;font-weight:700;letter-spacing:0.4px;transition:transform 0.15s ease;">▸</span>
+        </div>
+        <div class="latisha-past7-body" style="display:none;padding:0 18px 16px;">
+          ${groupBlocks}
+          <div style="margin-top:14px;padding-top:12px;border-top:2px solid #00838f;display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;">Grand total</div>
+            <div style="font-size:1.1rem;font-weight:800;color:#00838f;">${grandTotal.toFixed(1)} hr</div>
+          </div>
+          <button type="button" class="latisha-past7-copy"
+                  data-clipboard="${escapeHtml(clipboardText)}"
+                  style="margin-top:12px;background:#00838f;border:none;color:#fff;font-size:0.85rem;font-weight:700;padding:9px 16px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;">
+            Copy summary to clipboard
+          </button>
+        </div>
+      </div>
+    `;
   }
 
   // Update the summary line on a single card (time range + hours pill) without
@@ -4813,6 +4980,34 @@ const MEDTRONIC_PAR = [
     // Add manual hours button
     const addBtn = document.getElementById('latisha-add-hours-btn');
     if (addBtn) addBtn.onclick = openAddManualHoursPrompt;
+
+    // Past-7-days card expand/collapse + copy button
+    dashEl.querySelectorAll('.latisha-past7-card').forEach(card => {
+      const summary = card.querySelector('.latisha-past7-summary');
+      const body    = card.querySelector('.latisha-past7-body');
+      const chev    = card.querySelector('.latisha-past7-chev');
+      if (summary && body) {
+        summary.onclick = () => {
+          const open = body.style.display !== 'none';
+          body.style.display = open ? 'none' : 'block';
+          if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+        };
+      }
+      const copyBtn = card.querySelector('.latisha-past7-copy');
+      if (copyBtn) {
+        copyBtn.onclick = async (e) => {
+          e.stopPropagation();
+          const text = copyBtn.getAttribute('data-clipboard') || '';
+          try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.textContent = '✓ Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy summary to clipboard'; }, 2000);
+          } catch (err) {
+            alert('Could not copy automatically. Long-press the summary above to select and copy.');
+          }
+        };
+      }
+    });
   }
 
   function openAddManualHoursPrompt() {
