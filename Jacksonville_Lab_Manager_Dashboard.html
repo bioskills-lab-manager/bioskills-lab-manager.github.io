@@ -3038,9 +3038,18 @@ const MEDTRONIC_PAR = [
       upcomingHero = buildLatishaScheduleHeroHtml();
     }
 
-    const visibleDays = state.days.filter(shouldShowDay);
+    let visibleDays = state.days.filter(shouldShowDay);
+    // Latisha's page shows ONLY today's card below the schedule hero —
+    // upcoming days live in the schedule hero already, no need to repeat.
+    if (CURRENT_ROLE_KEY === 'latisha') {
+      const todayKey = ymd(new Date());
+      visibleDays = visibleDays.filter(d => d.dateKey === todayKey);
+    }
     if (visibleDays.length === 0) {
-      dashEl.innerHTML = upcomingHero + `<div class="event-info"><div class="info-icon">i</div><div>No days match the current filter.</div></div>`;
+      dashEl.innerHTML = upcomingHero + (CURRENT_ROLE_KEY === 'latisha'
+        ? '' // schedule hero is enough — nothing else to show today
+        : `<div class="event-info"><div class="info-icon">i</div><div>No days match the current filter.</div></div>`);
+      if (CURRENT_ROLE_KEY === 'latisha') wireLatishaScheduleControls();
       return;
     }
 
