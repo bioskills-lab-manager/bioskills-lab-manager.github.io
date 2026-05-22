@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Jacksonville Bioskills Lab Manager</title>
+  <style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f4f6f9;color:#555;text-align:center;padding:60px 20px}a{color:#003da5;font-weight:600}</style>
+  <script>
+    // Root entry point. Honors ?role= and ?view= query params and forwards to
+    // the dashboard, so links like /?role=latisha work. Defaults to master.
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var role = (params.get('role') || 'master').toLowerCase();
+      var allowed = { master: 1, anamaria: 1, bert: 1, latisha: 1 };
+      if (!allowed[role]) role = 'master';
+      var view = params.get('view');
+      var url = 'Jacksonville_Lab_Manager_Dashboard.html';
+      var qs = [];
+      if (role !== 'master') qs.push('role=' + encodeURIComponent(role));
+      if (view) qs.push('view=' + encodeURIComponent(view));
+      if (qs.length) url += '?' + qs.join('&');
+      window.location.replace(url);
+    })();
+  </script>
+</head>
+<body>
+  <p>Opening the Lab Manager…</p>
+  <p>If you're not redirected, <a href="Jacksonville_Lab_Manager_Dashboard.html">click here</a>.</p>
+</body>
+</html>
