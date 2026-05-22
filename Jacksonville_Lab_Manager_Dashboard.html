@@ -3247,6 +3247,7 @@ const MEDTRONIC_PAR = [
         : `<div style="background:#f8fafd;border:1px dashed #d6deea;border-radius:10px;padding:20px 16px;text-align:center;color:#777;font-size:0.9rem;">No lab tasks today — nothing scheduled in the lab.</div>`;
       dashEl.innerHTML =
         buildLatishaScheduleHeroHtml()
+        + buildLatishaCostCenterCard()
         + buildLatishaDailyTodoTab(todoInner, todayDays)
         + buildLatishaCalendarCard()
         + buildLatishaPast7DaysCard();
@@ -4488,6 +4489,25 @@ const MEDTRONIC_PAR = [
     return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
   }
 
+  // Resolve the cost center for a shift: an explicit override (a DSM name Josh
+  // picked from the dropdown) wins; otherwise auto-detect from the event title;
+  // otherwise fall back to Med Ed. Always returns a { name, cc } object.
+  function shiftDsm(evt, override) {
+    if (override) {
+      const d = DSMS.find(x => x.name === override);
+      if (d) return d;
+    }
+    const detected = evt ? detectDsmFromTitle(evt.title) : null;
+    return (detected ? dsmByName(detected) : null) || dsmByName('Med Ed');
+  }
+  // <option> list for the "Charge to" dropdown — every DSM/cost center.
+  function dsmOptionsHtml(selectedName) {
+    return DSMS.map(d => {
+      const sel = d.name === selectedName ? ' selected' : '';
+      return `<option value="${escapeHtml(d.name)}"${sel}>${escapeHtml(d.cc + ' · ' + d.name)}</option>`;
+    }).join('');
+  }
+
   function buildLatishaScheduleHeroHtml() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayKey = ymd(today);
@@ -4604,6 +4624,7 @@ const MEDTRONIC_PAR = [
         startTime: s.startTime || '08:00',
         endTime: s.endTime || defaultEndForEvent(evt),
         notes: s.notes || '',
+        costCenter: s.costCenter || '',   // Josh's manual cost-center override (DSM name)
       });
     });
     sched.manual.forEach(m => {
@@ -4616,6 +4637,7 @@ const MEDTRONIC_PAR = [
         startTime: m.startTime || '',
         endTime: m.endTime || '',
         notes: m.notes || '',
+        costCenter: m.costCenter || '',
       });
     });
     items.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
@@ -4638,20 +4660,16 @@ const MEDTRONIC_PAR = [
       const titleText = isManual
         ? '<span style="font-style:italic;opacity:0.7;">Manual entry</span>'
         : escapeHtml(item.evt.title || '(untitled)') + (item.multiDayLabel || '');
-      // Cost center — detect DSM from event title, fall back to Med Ed
-      let costCenterHtml = '';
-      if (!isManual) {
-        const dsmName = detectDsmFromTitle(item.evt.title);
-        const dsm = dsmName ? dsmByName(dsmName) : dsmByName('Med Ed');
-        if (dsm) {
-          costCenterHtml = `
-            <div style="font-size:0.78rem;color:#1a1a2e;margin-top:6px;line-height:1.4;">
-              <strong style="color:#6a1b9a;">Charge to:</strong>
-              <span style="font-family:ui-monospace,Menlo,monospace;font-weight:700;">${escapeHtml(dsm.cc)}</span>
-              · ${escapeHtml(dsm.name)}
-            </div>`;
-        }
-      }
+      // Cost center — editable dropdown. Defaults to the saved override, else
+      // auto-detected from the title, else Med Ed. Changing it updates the
+      // "Cost centers to charge" reference card below.
+      const effectiveDsm = shiftDsm(isManual ? null : item.evt, item.costCenter);
+      const costCenterHtml = `
+        <label style="display:block;font-size:0.72rem;font-weight:700;color:#6a1b9a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Charge to (cost center)</label>
+        <select class="latisha-sched-cc"
+                style="width:100%;border:1.5px solid #d0d8e8;border-radius:6px;padding:7px 10px;font-size:0.9rem;font-family:inherit;box-sizing:border-box;background:#fff;color:#1a1a2e;margin-bottom:12px;">
+          ${dsmOptionsHtml(effectiveDsm.name)}
+        </select>`;
       const removeBtn = isManual
         ? `<button type="button" class="latisha-sched-remove" ${dataAttrs} title="Remove this manual entry"
                   style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:1.1rem;padding:2px 6px;">×</button>`
@@ -4717,6 +4735,94 @@ const MEDTRONIC_PAR = [
           <span style="color:#6a1b9a;font-size:0.85rem;font-weight:700;letter-spacing:0.4px;white-space:nowrap;">OPEN ›</span>
         </div>
       </a>
+    `;
+  }
+
+  // Collect Latisha's upcoming shifts (workshops + manual entries) within the
+  // next `days`, each resolved to its effective cost center. Shared by the
+  // cost-center reference card. Mirrors the schedule hero's date expansion.
+  function collectUpcomingLatishaShifts(days) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayKey = ymd(today);
+    const horizon = ymd(addDays(today, days));
+    const sched = loadLatishaSchedule();
+    const out = [];
+    state.events.filter(evt => {
+      const who = (evt.who || '').toLowerCase();
+      const title = (evt.title || '').toLowerCase();
+      return who.includes('latisha') || title.includes('latisha');
+    }).forEach(evt => {
+      const startKey = (evt.start_dt || '').slice(0, 10);
+      const endKey   = (evt.end_dt || evt.start_dt || '').slice(0, 10);
+      if (!startKey) return;
+      const startD = parseYMD(startKey);
+      const endD   = parseYMD(endKey);
+      const span = Math.max(0, Math.round((endD - startD) / 86400000));
+      for (let i = 0; i <= span; i++) {
+        const dK = ymd(addDays(startD, i));
+        if (dK < todayKey || dK > horizon) continue;
+        const saved = sched.events[evt.id + ':' + dK] || sched.events[evt.id] || {};
+        out.push({
+          dayKey: dK,
+          title: evt.title || '(untitled)',
+          refKey: 'w:' + evt.id + ':' + dK,
+          multiDayLabel: span > 0 ? ` · Day ${i + 1} of ${span + 1}` : '',
+          dsm: shiftDsm(evt, saved.costCenter),
+        });
+      }
+    });
+    sched.manual.forEach(m => {
+      if (!m.date || m.date < todayKey || m.date > horizon) return;
+      out.push({
+        dayKey: m.date,
+        title: 'Manual entry',
+        refKey: 'm:' + m.id,
+        multiDayLabel: '',
+        dsm: shiftDsm(null, m.costCenter),
+      });
+    });
+    out.sort((a, b) => a.dayKey.localeCompare(b.dayKey));
+    return out;
+  }
+
+  // Reference card (sits directly under the 30-day schedule) — lists each
+  // upcoming shift and the cost center it bills to. Auto-populates from the
+  // dropdowns Josh sets on each shift. Green = "this is what to charge."
+  function buildLatishaCostCenterCard() {
+    const shifts = collectUpcomingLatishaShifts(30);
+    const accent = '#2e7d32', light = '#e8f5e9';
+    let body;
+    if (!shifts.length) {
+      body = `<div style="padding:16px 0 2px;text-align:center;color:#777;font-size:0.88rem;">No upcoming shifts to assign a cost center to yet.</div>`;
+    } else {
+      body = shifts.map(s => {
+        const d = parseYMD(s.dayKey);
+        const dateLabel = `${DOW[d.getDay()]} · ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+        return `
+          <div class="latisha-ref-row" data-ref-key="${escapeHtml(s.refKey)}"
+               style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eef1f6;">
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#888;">${escapeHtml(dateLabel)}</div>
+              <div style="font-size:0.92rem;font-weight:600;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(s.title)}${escapeHtml(s.multiDayLabel || '')}</div>
+            </div>
+            <div class="latisha-ref-cc" style="text-align:right;white-space:nowrap;">
+              <div style="font-family:ui-monospace,Menlo,monospace;font-weight:700;color:${accent};font-size:0.95rem;">${escapeHtml(s.dsm.cc)}</div>
+              <div style="font-size:0.78rem;color:#555;">${escapeHtml(s.dsm.name)}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+    return `
+      <div class="latisha-ref-card" style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid ${accent};border-radius:10px;padding:14px 18px;margin-bottom:14px;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:4px;">
+          <div style="background:${light};color:${accent};border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🏷️</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:${accent};margin-bottom:2px;">Cost centers to charge</div>
+            <div style="font-size:0.82rem;color:#666;">Which cost center each shift bills to. Tap a shift in the schedule above to change it.</div>
+          </div>
+        </div>
+        <div>${body}</div>
+      </div>
     `;
   }
 
@@ -4792,7 +4898,8 @@ const MEDTRONIC_PAR = [
           startTime: s.startTime,
           endTime: s.endTime,
           notes: s.notes || '',
-          dsmName: detectDsmFromTitle(evt.title) || 'Med Ed',
+          // Honor Josh's manual cost-center override, else auto-detect
+          dsmName: s.costCenter || detectDsmFromTitle(evt.title) || 'Med Ed',
         });
       }
     });
@@ -4806,7 +4913,7 @@ const MEDTRONIC_PAR = [
         startTime: m.startTime,
         endTime: m.endTime,
         notes: m.notes || '',
-        dsmName: 'Med Ed',
+        dsmName: m.costCenter || 'Med Ed',
       });
     });
 
@@ -4944,6 +5051,22 @@ const MEDTRONIC_PAR = [
     });
   }
 
+  // Rewrite a single row in the "Cost centers to charge" reference card when
+  // Josh changes a shift's cost center — keeps the card in sync without a full
+  // re-render (which would collapse the shift card being edited).
+  function latishaUpdateRefRow(refKey, dsm) {
+    let row = null;
+    dashEl.querySelectorAll('.latisha-ref-row').forEach(r => {
+      if (r.getAttribute('data-ref-key') === refKey) row = r;
+    });
+    if (!row) return;
+    const cell = row.querySelector('.latisha-ref-cc');
+    if (!cell) return;
+    cell.innerHTML = `
+      <div style="font-family:ui-monospace,Menlo,monospace;font-weight:700;color:#2e7d32;font-size:0.95rem;">${escapeHtml(dsm.cc)}</div>
+      <div style="font-size:0.78rem;color:#555;">${escapeHtml(dsm.name)}</div>`;
+  }
+
   // Recompute and rewrite the total-hours number in the gradient header
   function latishaUpdateTotalHours() {
     let total = 0;
@@ -4979,8 +5102,11 @@ const MEDTRONIC_PAR = [
       const startEl = card.querySelector('.latisha-sched-start');
       const endEl   = card.querySelector('.latisha-sched-end');
       const notesEl = card.querySelector('.latisha-sched-notes');
+      const ccEl    = card.querySelector('.latisha-sched-cc');
       const onSave = () => {
         const sched = loadLatishaSchedule();
+        const ccVal = ccEl ? ccEl.value : '';
+        let refKey = '', dsm = null;
         if (kind === 'workshop') {
           const eventId = card.getAttribute('data-event-id');
           const dayKey  = card.getAttribute('data-day-key') || '';
@@ -4990,7 +5116,11 @@ const MEDTRONIC_PAR = [
             startTime: startEl.value,
             endTime:   endEl.value,
             notes:     notesEl.value,
+            costCenter: ccVal,
           };
+          refKey = 'w:' + eventId + ':' + dayKey;
+          const evtObj = state.events.find(e => String(e.id) === String(eventId));
+          dsm = shiftDsm(evtObj, ccVal);
         } else if (kind === 'manual') {
           const manualId = card.getAttribute('data-manual-id');
           const entry = sched.manual.find(m => m.id === manualId);
@@ -4998,17 +5128,22 @@ const MEDTRONIC_PAR = [
             entry.startTime = startEl.value;
             entry.endTime   = endEl.value;
             entry.notes     = notesEl.value;
+            entry.costCenter = ccVal;
           }
+          refKey = 'm:' + manualId;
+          dsm = shiftDsm(null, ccVal);
         }
         saveLatishaSchedule(sched);
         // In-place update — do NOT call renderAll() because that would
         // collapse the card the user is editing and steal focus.
         latishaUpdateCardSummary(card, startEl.value, endEl.value);
         latishaUpdateTotalHours();
+        if (refKey && dsm) latishaUpdateRefRow(refKey, dsm);
       };
       startEl.onchange = onSave;
       endEl.onchange   = onSave;
       notesEl.onchange = onSave;
+      if (ccEl) ccEl.onchange = onSave;
     });
     // Remove manual entry
     dashEl.querySelectorAll('.latisha-sched-remove').forEach(btn => {
