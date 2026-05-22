@@ -3233,28 +3233,36 @@ const MEDTRONIC_PAR = [
         collapsibleAfter: 3,
       });
     } else if (CURRENT_ROLE_KEY === 'latisha') {
-      // Contractor schedule manager
-      upcomingHero = buildLatishaScheduleHeroHtml();
+      // Contractor view — exactly three things, in order:
+      //   1. compact 30-day schedule (the main focus)
+      //   2. daily lab to-do tab (today only, click to expand)
+      //   3. full calendar tab (link out)
+      //   4. past-7-days charge-back tab (kept for invoicing)
+      // Fully rendered here, then early-return so the shared day-loop below
+      // doesn't also dump the day cards.
+      const todayKey = ymd(new Date());
+      const todayDays = state.days.filter(shouldShowDay).filter(d => d.dateKey === todayKey);
+      const todoInner = todayDays.length
+        ? todayDays.map(renderDay).join('')
+        : `<div style="background:#f8fafd;border:1px dashed #d6deea;border-radius:10px;padding:20px 16px;text-align:center;color:#777;font-size:0.9rem;">No lab tasks today — nothing scheduled in the lab.</div>`;
+      dashEl.innerHTML =
+        buildLatishaScheduleHeroHtml()
+        + buildLatishaDailyTodoTab(todoInner, todayDays)
+        + buildLatishaCalendarCard()
+        + buildLatishaPast7DaysCard();
+      wireDayViewControls();
+      wireLatishaScheduleControls();
+      return;
     }
 
     let visibleDays = state.days.filter(shouldShowDay);
-    // Latisha's page shows ONLY today's card below the schedule hero —
-    // upcoming days live in the schedule hero already, no need to repeat.
-    if (CURRENT_ROLE_KEY === 'latisha') {
-      const todayKey = ymd(new Date());
-      visibleDays = visibleDays.filter(d => d.dateKey === todayKey);
-    }
     if (visibleDays.length === 0) {
-      dashEl.innerHTML = upcomingHero + (CURRENT_ROLE_KEY === 'latisha'
-        ? '' // schedule hero is enough — nothing else to show today
-        : `<div class="event-info"><div class="info-icon">i</div><div>No days match the current filter.</div></div>`);
-      if (CURRENT_ROLE_KEY === 'latisha') wireLatishaScheduleControls();
+      dashEl.innerHTML = upcomingHero + `<div class="event-info"><div class="info-icon">i</div><div>No days match the current filter.</div></div>`;
       return;
     }
 
     dashEl.innerHTML = upcomingHero + visibleDays.map(renderDay).join('');
     wireDayViewControls();
-    if (CURRENT_ROLE_KEY === 'latisha') wireLatishaScheduleControls();
   }
 
   // ── Day-view control wiring (extracted for reuse by renderAll + renderHomeView) ──
@@ -4483,9 +4491,9 @@ const MEDTRONIC_PAR = [
   function buildLatishaScheduleHeroHtml() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayKey = ymd(today);
-    // Schedule manager shows only the next 7 days — keeps the top of the
-    // dashboard tight. Beyond that, the regular calendar/day view covers it.
-    const horizon = ymd(addDays(today, 7));
+    // Schedule shows the next 30 days — this is the main focus of Latisha's
+    // page. Beyond that, the Full Calendar tab covers it.
+    const horizon = ymd(addDays(today, 30));
     const sched = loadLatishaSchedule();
 
     // Upcoming workshops where Latisha is tagged in "Who" or title.
@@ -4538,10 +4546,10 @@ const MEDTRONIC_PAR = [
       <div style="background:linear-gradient(135deg,#6a1b9a 0%,#8e24aa 100%);color:#fff;border-radius:14px;padding:18px 22px;margin-bottom:14px;box-shadow:0 4px 18px rgba(106,27,154,0.18);">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
           <div style="flex:1;min-width:200px;">
-            <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Your schedule · next 7 days</div>
+            <div style="font-size:0.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);margin-bottom:4px;">Your schedule · next 30 days</div>
             <div class="latisha-total-hours" style="font-size:1.35rem;font-weight:700;">
               ${workshops.length === 0 && sched.manual.length === 0
-                ? 'No shifts scheduled this week'
+                ? 'No shifts scheduled'
                 : `${(totalHours).toFixed(1)} hours scheduled`}
             </div>
             <div style="font-size:0.82rem;color:rgba(255,255,255,0.85);margin-top:2px;">
@@ -4560,8 +4568,8 @@ const MEDTRONIC_PAR = [
       return heroOpen + `
         <div style="background:rgba(255,255,255,0.95);border-radius:10px;padding:24px 18px;text-align:center;color:#666;font-size:0.9rem;">
           <div style="font-size:1.8rem;margin-bottom:6px;">📅</div>
-          <div style="font-weight:600;color:#1a1a2e;margin-bottom:4px;">No shifts in the next 7 days</div>
-          <div style="font-size:0.82rem;">When Josh tags you in a Teamup event for this week, it shows up here. Use "+ Add hours" for non-workshop time.</div>
+          <div style="font-weight:600;color:#1a1a2e;margin-bottom:4px;">No shifts in the next 30 days</div>
+          <div style="font-size:0.82rem;">When Josh tags you in a Teamup event, it shows up here. Use "+ Add hours" for non-workshop time.</div>
         </div>
       ` + heroClose;
     }
@@ -4683,9 +4691,16 @@ const MEDTRONIC_PAR = [
       `;
     }).join('');
 
-    // Second card — quick link to the full upcoming calendar (beyond 7 days)
+    // Latisha's page = compact 30-day schedule (this hero) followed by three
+    // collapsible tabs (daily to-do, full calendar, past-7-days), all wired in
+    // renderAll. This function returns only the schedule hero.
+    return heroOpen + cardsHtml + heroClose;
+  }
+
+  // Tab 2 — link out to the full upcoming calendar (beyond the 30-day schedule)
+  function buildLatishaCalendarCard() {
     const calendarUrl = buildUrl('latisha', 'calendar');
-    const calendarCard = `
+    return `
       <a href="${escapeHtml(calendarUrl)}" style="text-decoration:none;color:inherit;">
         <div style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid #6a1b9a;border-radius:10px;padding:14px 18px;margin-bottom:14px;
                     box-shadow:0 2px 6px rgba(0,0,0,0.04);cursor:pointer;
@@ -4697,21 +4712,55 @@ const MEDTRONIC_PAR = [
           <div style="flex:1;min-width:0;">
             <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#6a1b9a;margin-bottom:2px;">Full calendar</div>
             <div style="font-size:0.98rem;font-weight:700;color:#1a1a2e;">View all upcoming events</div>
-            <div style="font-size:0.82rem;color:#666;margin-top:1px;">Beyond the next 7 days · month grid view</div>
+            <div style="font-size:0.82rem;color:#666;margin-top:1px;">Beyond the next 30 days · month grid view</div>
           </div>
           <span style="color:#6a1b9a;font-size:0.85rem;font-weight:700;letter-spacing:0.4px;white-space:nowrap;">OPEN ›</span>
         </div>
       </a>
     `;
-    // Third card — Past 7 days review for charge-back / invoicing
-    const past7Card = buildLatishaPast7DaysCard();
-    return heroOpen + cardsHtml + heroClose + calendarCard + past7Card;
+  }
+
+  // Tab 1 — today's lab to-do, collapsed into a click-to-expand tab so the
+  // 30-day schedule stays the focus. innerHtml is the rendered day-card(s) for
+  // today (or an empty-state). todayDays is the matching day objects, used only
+  // to compute the "X of Y tasks left" summary line.
+  function buildLatishaDailyTodoTab(innerHtml, todayDays) {
+    const open = getUserItem('latishaTodoOpen') === '1';
+    let total = 0, done = 0;
+    (todayDays || []).forEach(day => {
+      const allTasks = [...day.eventGroups.flatMap(g => g.tasks), ...dailyOpsLeaves(day)];
+      total += allTasks.length;
+      done  += allTasks.filter(t => isChecked(t.checkKey)).length;
+    });
+    const remaining = total - done;
+    const summaryLine = total === 0
+      ? 'No lab tasks today'
+      : (remaining === 0
+          ? `All ${total} task${total === 1 ? '' : 's'} done ✓`
+          : `${remaining} of ${total} task${total === 1 ? '' : 's'} left today`);
+    return `
+      <div class="latisha-todo-card" style="background:#fff;border:1px solid #e8ecf4;border-left:4px solid #003da5;border-radius:10px;margin-bottom:14px;box-shadow:0 2px 6px rgba(0,0,0,0.04);overflow:hidden;">
+        <div class="latisha-todo-summary" style="display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer;user-select:none;">
+          <div style="background:#e3f0ff;color:#003da5;border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">📋</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#003da5;margin-bottom:2px;">Daily lab to-do · today</div>
+            <div style="font-size:0.98rem;font-weight:700;color:#1a1a2e;">${escapeHtml(summaryLine)}</div>
+            <div style="font-size:0.82rem;color:#666;margin-top:1px;">Tap to ${open ? 'collapse' : 'expand'} today's lab checklist</div>
+          </div>
+          <span class="latisha-todo-chev" style="color:#003da5;font-size:0.95rem;font-weight:700;transition:transform 0.15s ease;${open ? 'transform:rotate(90deg);' : ''}">▸</span>
+        </div>
+        <div class="latisha-todo-body" style="display:${open ? 'block' : 'none'};padding:0 14px 14px;">
+          ${innerHtml}
+        </div>
+      </div>
+    `;
   }
 
   // Build the Past 7 Days card — collapsed by default. Shows every shift
   // worked in the last 7 days, grouped by cost center, with totals so
   // Latisha can submit invoices broken out by CC.
   function buildLatishaPast7DaysCard() {
+    const open = getUserItem('latishaPast7Open') === '1';
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayKey = ymd(today);
     const earliestKey = ymd(addDays(today, -7));
@@ -4855,9 +4904,9 @@ const MEDTRONIC_PAR = [
             <div style="font-size:0.98rem;font-weight:700;color:#1a1a2e;">${grandTotal.toFixed(1)} hours worked · ${pastShifts.length} shift${pastShifts.length === 1 ? '' : 's'}</div>
             <div style="font-size:0.82rem;color:#666;margin-top:1px;">${escapeHtml(dateRange)} · tap to see breakdown</div>
           </div>
-          <span class="latisha-past7-chev" style="color:#00838f;font-size:0.95rem;font-weight:700;letter-spacing:0.4px;transition:transform 0.15s ease;">▸</span>
+          <span class="latisha-past7-chev" style="color:#00838f;font-size:0.95rem;font-weight:700;letter-spacing:0.4px;transition:transform 0.15s ease;${open ? 'transform:rotate(90deg);' : ''}">▸</span>
         </div>
-        <div class="latisha-past7-body" style="display:none;padding:0 18px 16px;">
+        <div class="latisha-past7-body" style="display:${open ? 'block' : 'none'};padding:0 18px 16px;">
           ${groupBlocks}
           <div style="margin-top:14px;padding-top:12px;border-top:2px solid #00838f;display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;">Grand total</div>
@@ -4897,10 +4946,6 @@ const MEDTRONIC_PAR = [
 
   // Recompute and rewrite the total-hours number in the gradient header
   function latishaUpdateTotalHours() {
-    const sched = loadLatishaSchedule();
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const todayKey = ymd(today);
-    const horizon = ymd(addDays(today, 7));
     let total = 0;
     // Walk current cards in DOM — keeps the calc in sync with what's visible
     dashEl.querySelectorAll('.latisha-sched-card').forEach(card => {
@@ -4981,6 +5026,23 @@ const MEDTRONIC_PAR = [
     const addBtn = document.getElementById('latisha-add-hours-btn');
     if (addBtn) addBtn.onclick = openAddManualHoursPrompt;
 
+    // Daily lab to-do tab expand/collapse. Open state is persisted because
+    // checking a daily-ops task triggers a full renderAll() — without this the
+    // tab would snap shut every time Latisha ticks a box.
+    dashEl.querySelectorAll('.latisha-todo-card').forEach(card => {
+      const summary = card.querySelector('.latisha-todo-summary');
+      const body    = card.querySelector('.latisha-todo-body');
+      const chev    = card.querySelector('.latisha-todo-chev');
+      if (summary && body) {
+        summary.onclick = () => {
+          const isOpen = body.style.display !== 'none';
+          body.style.display = isOpen ? 'none' : 'block';
+          if (chev) chev.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+          setUserItem('latishaTodoOpen', isOpen ? '0' : '1');
+        };
+      }
+    });
+
     // Past-7-days card expand/collapse + copy button
     dashEl.querySelectorAll('.latisha-past7-card').forEach(card => {
       const summary = card.querySelector('.latisha-past7-summary');
@@ -4988,9 +5050,10 @@ const MEDTRONIC_PAR = [
       const chev    = card.querySelector('.latisha-past7-chev');
       if (summary && body) {
         summary.onclick = () => {
-          const open = body.style.display !== 'none';
-          body.style.display = open ? 'none' : 'block';
-          if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+          const isOpen = body.style.display !== 'none';
+          body.style.display = isOpen ? 'none' : 'block';
+          if (chev) chev.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+          setUserItem('latishaPast7Open', isOpen ? '0' : '1');
         };
       }
       const copyBtn = card.querySelector('.latisha-past7-copy');
