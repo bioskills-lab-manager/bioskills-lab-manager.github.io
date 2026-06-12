@@ -1193,6 +1193,7 @@ const TASK_TEMPLATES = {
 // Districts shown in trailing comment for traceability.
 const DSMS = [
   { name: "Med Ed",                    cc: "165929" },   // default for non-rep events
+  { name: "ENT Marketing",             cc: "166200" },   // marketing-funded labs / programs
   { name: "Allison Lopresti",          cc: "166257" },   // Mid-Atlantic (East)
   { name: "Timothy Jordain",           cc: "166058" },   // Northeast (East)
   { name: "Dana Maradie",              cc: "163039" },   // Metro NYC (East)
@@ -1793,13 +1794,24 @@ function vipKitForStations(n) {
 }
 
 const LAB_VARIANTS = {
+  // Default — empty list. Opens the picker with no pre-populated items so you
+  // just search for the products you want to order.
+  blank: {
+    label: "Start from blank (search & add)",
+    items: [],
+  },
   default: {
-    label: "General lab (default)",
+    label: "General lab",
     items: RESTOCK_CATALOG.lab,
   },
   vip1Station: {
     label: "1-Station VIP Lab",
-    items: vipKitForStations(1),
+    // Override: 1-station defaults to the non-invasive Axiem tracker
+    // (9734887XOM) instead of the standard patient tracker (9733534XOM).
+    items: buildDefaultList(VIP_LAB_PER_STATION.map(([pn, q]) => [
+      pn === '9733534XOM' ? '9734887XOM' : pn,
+      q,
+    ])),
   },
   vip2Station: {
     label: "2-Station Lab",
@@ -3722,7 +3734,7 @@ const MEDTRONIC_PAR = [
       // Default to 1-Station VIP Lab — most common configuration. User can
       // pick a different variant from the dropdown; their choice is sticky
       // per-event.
-      const fallbackVariant = 'vip1Station';
+      const fallbackVariant = 'blank';
       const savedVariant = (evt.id && loadVariantPrefs()[evt.id]) || fallbackVariant;
       const variant = LAB_VARIANTS[savedVariant] ? savedVariant : fallbackVariant;
       restockState.variant = variant;
