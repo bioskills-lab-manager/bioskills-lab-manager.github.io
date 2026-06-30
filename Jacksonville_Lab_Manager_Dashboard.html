@@ -1194,6 +1194,7 @@ const TASK_TEMPLATES = {
 const DSMS = [
   { name: "Med Ed",                    cc: "165929" },   // default for non-rep events
   { name: "ENT Marketing",             cc: "166200" },   // marketing-funded labs / programs
+  { name: "Mike Bush/ENT Society",     cc: "165931" },   // ENT Society programs (Mike Bush)
   { name: "Allison Lopresti",          cc: "166257" },   // Mid-Atlantic (East)
   { name: "Timothy Jordain",           cc: "166058" },   // Northeast (East)
   { name: "Dana Maradie",              cc: "163039" },   // Metro NYC (East)
@@ -3547,11 +3548,15 @@ const MEDTRONIC_PAR = [
     }
   });
 
-  // Populate DSM dropdown once (sorted: Med Ed pinned, then alphabetical)
+  // Populate DSM dropdown once (pinned order: Med Ed, ENT Marketing, Mike Bush/ENT Society, then alphabetical)
   (function populateDsmSelect() {
     const sorted = DSMS.slice().sort((a, b) => {
       if (a.name === "Med Ed") return -1;
       if (b.name === "Med Ed") return 1;
+      if (a.name === "ENT Marketing") return -1;
+      if (b.name === "ENT Marketing") return 1;
+      if (a.name === "Mike Bush/ENT Society") return -1;
+      if (b.name === "Mike Bush/ENT Society") return 1;
       return a.name.localeCompare(b.name);
     });
     modalDsmSelect.innerHTML = sorted.map(d =>
