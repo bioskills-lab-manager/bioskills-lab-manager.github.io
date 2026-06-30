@@ -2184,8 +2184,7 @@ const MEDTRONIC_PAR = [
     </div>
     <div class="modal-footer">
       <button class="btn" id="restock-preview" type="button">Preview email body</button>
-      <button class="btn" id="restock-copy" type="button">Copy to clipboard</button>
-      <button class="btn primary" id="restock-send" type="button">Open in mail app →</button>
+      <button class="btn primary" id="restock-copy" type="button">Copy email for Outlook</button>
     </div>
   </div>
 </div>
@@ -3495,7 +3494,6 @@ const MEDTRONIC_PAR = [
   const modalSubject    = document.getElementById('restock-subject');
   const modalNotes      = document.getElementById('restock-notes');
   const modalClose      = document.getElementById('restock-close');
-  const modalSend       = document.getElementById('restock-send');
   const modalCopy       = document.getElementById('restock-copy');
   const modalPreview    = document.getElementById('restock-preview');
   const itemsTbody      = document.getElementById('items-tbody');
@@ -3806,57 +3804,6 @@ const MEDTRONIC_PAR = [
     alert(body);
   });
 
-  // Helper: open a mailto: URL reliably across browsers. On iOS / Android,
-  // window.location.href = mailtoUrl often silently fails (especially when
-  // triggered after an await) — synthesizing a click on a real <a href>
-  // element is what the OS treats as a legitimate user-initiated nav, so
-  // the Mail app actually launches.
-  function openMailtoLink(url) {
-    try {
-      const a = document.createElement('a');
-      a.href = url;
-      a.rel = 'noopener';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => a.remove(), 100);
-    } catch (e) {
-      // Last-resort fallback
-      window.location.href = url;
-    }
-  }
-
-  modalSend.addEventListener('click', async () => {
-    const body = buildEmailBody();
-    // Strip CRLF from subject — newlines in mailto subjects break the header
-    const cleanSubject = (modalSubject.value || '').replace(/[\r\n]+/g, ' ').trim();
-    const to = encodeURIComponent(modalTo.value || '');
-    const cc = encodeURIComponent(modalCc.value || '');
-    const subj = encodeURIComponent(cleanSubject);
-    const url = `mailto:${to}?cc=${cc}&subject=${subj}&body=${encodeURIComponent(body)}`;
-    // mailto: URLs over ~2000 chars get silently truncated by some clients
-    // (Outlook desktop, iOS Mail). With 20+ items we hit that easily.
-    if (url.length > 1900) {
-      const ok = confirm(
-        'This email is too long for some mail apps to open reliably (' +
-        url.length + ' chars). Tap OK to copy the full email to your clipboard ' +
-        'and paste it into a fresh draft, or Cancel to try opening anyway.'
-      );
-      if (ok) {
-        try {
-          await navigator.clipboard.writeText(
-            `To: ${modalTo.value}\nCc: ${modalCc.value}\nSubject: ${cleanSubject}\n\n${body}`
-          );
-          alert('Copied. Open your mail app and paste into a new message.');
-          return;
-        } catch (e) {
-          // fall through to mailto
-        }
-      }
-    }
-    openMailtoLink(url);
-  });
-
   modalCopy.addEventListener('click', async () => {
     const body = buildEmailBody();
     const text =
@@ -3866,8 +3813,8 @@ const MEDTRONIC_PAR = [
       body;
     try {
       await navigator.clipboard.writeText(text);
-      modalCopy.textContent = 'Copied ✓';
-      setTimeout(() => { modalCopy.textContent = 'Copy to clipboard'; }, 1500);
+      modalCopy.textContent = 'Copied ✓ — paste into Outlook';
+      setTimeout(() => { modalCopy.textContent = 'Copy email for Outlook'; }, 1500);
     } catch (e) {
       modalCopy.textContent = 'Copy failed';
     }
@@ -6255,8 +6202,11 @@ const MEDTRONIC_PAR = [
     ].join('\n');
 
     const subject = `Lab Supply Reorder Request — ${cc.fromLab} — ${dateStr}`;
-    const url = `mailto:${encodeURIComponent(LAB_SUPPLY_CONTACT.email)}?cc=${encodeURIComponent(cc.contactEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    openMailtoLink(url);
+    const text = `To: ${LAB_SUPPLY_CONTACT.email}\nCc: ${cc.contactEmail}\nSubject: ${subject}\n\n${body}`;
+    navigator.clipboard.writeText(text).then(
+      () => alert('Lab supply reorder email copied ✓\n\nOpen Outlook, start a new message, and paste (Ctrl/Cmd+V).'),
+      () => alert(text)
+    );
   }
 
   function orderMedtronicViaCS(below) {
